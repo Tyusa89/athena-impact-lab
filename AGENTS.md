@@ -9,5 +9,5 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Athena logic lives in src/lib/athena (data, deterministic engine, provider interface); records are permission-filtered before analysis so hidden IDs cannot leak.
+- Athena logic lives in src/lib/athena (data, deterministic engine, provider interface); records are permission-filtered before any output is computed; signals are observations only and hypotheses stay unverified; approvals are a pure local reducer.
 - The prototype stays isolated: synthetic data only, no backend, auth, or live model calls.

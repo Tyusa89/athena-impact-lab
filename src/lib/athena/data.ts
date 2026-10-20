@@ -49,12 +49,30 @@ export interface Scenario {
 
 type Row = [MetricKey, Department, string, string, number, number, string, string?];
 
-function build(prefix: string, rows: Row[]): EvidenceRecord[] {
+export const PERIODS = {
+  prior: { label: "Q2 2026", date: "2026-06-30" },
+  current: { label: "Q3 2026", date: "2026-09-30" },
+} as const;
+
+export const DEPT_WORKSPACE: Record<Department, string> = {
+  Marketing: "ws-marketing",
+  Sales: "ws-sales",
+  Operations: "ws-ops",
+  Finance: "ws-finance",
+};
+
+const DEPT_CODE: Record<Department, string> = { Marketing: "MKT", Sales: "SAL", Operations: "OPS", Finance: "FIN" };
+
+/** Builds paired prior/current records. IDs are numbered per department; workspace is derived from department. */
+export function build(prefix: string, rows: Row[]): EvidenceRecord[] {
   const out: EvidenceRecord[] = [];
-  rows.forEach(([metric, department, workspace, source, prior, current, unit, note], i) => {
-    const n = String(i + 1).padStart(3, "0");
-    out.push({ id: `${prefix}-${department.slice(0, 3).toUpperCase()}-${n}P`, department, workspace, date: "2026-06-30", source, metric, period: "prior", value: prior, unit });
-    out.push({ id: `${prefix}-${department.slice(0, 3).toUpperCase()}-${n}C`, department, workspace, date: "2026-09-30", source, metric, period: "current", value: current, unit, note });
+  const counters: Partial<Record<Department, number>> = {};
+  rows.forEach(([metric, department, workspace, source, prior, current, unit, note]) => {
+    if (workspace !== DEPT_WORKSPACE[department]) throw new Error(`Workspace mismatch for ${metric}`);
+    const n = String((counters[department] = (counters[department] ?? 0) + 1)).padStart(3, "0");
+    const base = `${prefix}-${DEPT_CODE[department]}-${n}`;
+    out.push({ id: `${base}-Q2`, department, workspace, date: PERIODS.prior.date, source, metric, period: "prior", value: prior, unit });
+    out.push({ id: `${base}-Q3`, department, workspace, date: PERIODS.current.date, source, metric, period: "current", value: current, unit, note });
   });
   return out;
 }
@@ -62,8 +80,8 @@ function build(prefix: string, rows: Row[]): EvidenceRecord[] {
 export const SCENARIOS: Scenario[] = [
   {
     id: "baseline",
-    name: "Q3 Paid-Social Surge",
-    description: "Leads up after a broad paid-social push; quality, conversion and fulfillment degrade.",
+    name: "Scenario A — Q3 synthetic snapshot",
+    description: "Synthetic Q2 vs Q3 2026 records across four departments.",
     records: build("VH", [
       ["leads", "Marketing", "ws-marketing", "SYN-CRM Campaign Export", 4200, 6300, "leads", "Paid social share rose 22% → 51%"],
       ["mql_rate", "Marketing", "ws-marketing", "SYN-CRM Lead Scoring", 34, 21, "%"],
@@ -77,8 +95,8 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "quality-only",
-    name: "Lead Quality Only",
-    description: "Leads up and quality down, but operations are healthy.",
+    name: "Scenario B — Q3 synthetic snapshot",
+    description: "Synthetic Q2 vs Q3 2026 records across four departments.",
     records: build("VQ", [
       ["leads", "Marketing", "ws-marketing", "SYN-CRM Campaign Export", 4000, 5600, "leads"],
       ["mql_rate", "Marketing", "ws-marketing", "SYN-CRM Lead Scoring", 33, 24, "%"],
@@ -91,8 +109,8 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "ops-only",
-    name: "Fulfillment Bottleneck",
-    description: "Lead quality stable; a warehouse bottleneck drives cancellations.",
+    name: "Scenario C — Q3 synthetic snapshot",
+    description: "Synthetic Q2 vs Q3 2026 records across four departments.",
     records: build("VO", [
       ["leads", "Marketing", "ws-marketing", "SYN-CRM Campaign Export", 4100, 4700, "leads"],
       ["mql_rate", "Marketing", "ws-marketing", "SYN-CRM Lead Scoring", 33, 33, "%"],

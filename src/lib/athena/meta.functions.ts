@@ -7,7 +7,7 @@ export const getMetaStatus = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const runMetaComparison = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => data)
+  .validator((data: unknown) => data)
   .handler(async ({ data }) => {
     const { runMeta } = await import("./meta/adapter.server");
     return runMeta(data, { META_MODEL_API_KEY: process.env["META_MODEL_API_KEY"], META_MODEL_ENABLED: process.env["META_MODEL_ENABLED"] }, fetch);

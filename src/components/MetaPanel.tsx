@@ -5,7 +5,7 @@ import type { MetaResult, MetaStatus } from "@/lib/athena/meta/adapter.server";
 import type { Analysis } from "@/lib/athena/engine";
 import { META_MODEL } from "@/lib/athena/meta/contract";
 
-export function MetaPanel({ scenarioId, workspaces, analysis }: { scenarioId: string; workspaces: string[]; analysis: Analysis }) {
+export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenarioId: string; roleId: string; workspaces: string[]; analysis: Analysis }) {
   const statusFn = useServerFn(getMetaStatus);
   const runFn = useServerFn(runMetaComparison);
   const [status, setStatus] = useState<MetaStatus | null>(null);
@@ -14,13 +14,14 @@ export function MetaPanel({ scenarioId, workspaces, analysis }: { scenarioId: st
   const [result, setResult] = useState<MetaResult | null>(null);
 
   useEffect(() => { statusFn().then(setStatus).catch(() => setStatus(null)); }, [statusFn]);
-  useEffect(() => { setResult(null); setConfirm(false); }, [scenarioId, workspaces]);
+  useEffect(() => { setResult(null); setConfirm(false); }, [scenarioId, roleId, workspaces]);
 
-  const canRun = !!status?.ready && confirm && !busy && workspaces.length > 0;
+  const isCustom = roleId === "custom";
+  const canRun = !!status?.ready && confirm && !busy && !isCustom;
   const run = async () => {
     if (!canRun) return;
     setBusy(true);
-    try { setResult(await runFn({ data: { scenarioId, workspaces, ownerConfirmed: true } })); }
+    try { setResult(await runFn({ data: { scenarioId, roleId, ownerConfirmed: true } })); }
     catch { setResult({ state: "error", reason: "Server function failed.", requestSent: false }); }
     finally { setBusy(false); }
   };
@@ -40,8 +41,10 @@ export function MetaPanel({ scenarioId, workspaces, analysis }: { scenarioId: st
         <li className="flex justify-between text-muted-foreground"><span>Hard token cap (input / output incl. hidden reasoning)</span><span>{status ? `${status.maxInputTokens} / ${status.maxOutputTokens}` : "—"}</span></li>
         <li className="flex justify-between text-muted-foreground"><span>Cost per run</span><span>Unknown — pricing not verified</span></li>
       </ul>
+      <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"><b>DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION.</b> The server sends only the records its own fixed role list allows, and ignores any workspace list from the browser. But there is no sign-in, so anyone can claim any demo role. Not safe for real data.</p>
+      {isCustom && <p className="text-xs text-warning">Custom workspace toggles are on-screen only. Pick a named role to run Meta.</p>}
       <label className="flex items-start gap-2 text-xs">
-        <input type="checkbox" disabled={!status?.ready} checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-0.5" />
+        <input type="checkbox" disabled={!status?.ready || isCustom} checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-0.5" />
         <span className={status?.ready ? "" : "text-muted-foreground"}>I confirm sending one paid request with {workspaces.length} visible workspace(s) of synthetic data.</span>
       </label>
       <button onClick={run} disabled={!canRun} className="w-full rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40">

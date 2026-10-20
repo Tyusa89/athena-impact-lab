@@ -123,3 +123,55 @@ describe("meta output validation", () => {
     }
   });
 });
+
+import { buildBody, readUsage } from "./adapter.server";
+import { LIMITS, OutputSchema, RESPONSE_FORMAT, REASONING_EFFORT } from "./contract";
+
+describe("truncation fix — token accounting & compact schema", () => {
+  const finId = () => authorizedRecords(req(FIN))[0]!.id;
+  it("body sends hard cap 2000 as max_tokens and minimal reasoning effort", () => {
+    const b = buildBody([]);
+    expect(b.max_tokens).toBe(2000); expect(MAX_OUTPUT_TOKENS).toBe(2000);
+    expect(b.reasoning_effort).toBe("minimal"); expect(REASONING_EFFORT).toBe("minimal");
+    expect(b.stream).toBe(false);
+  });
+  it("sent request body carries the exact cap", async () => {
+    const f = mockFetch(good(finId()));
+    await runMeta(req(FIN), READY, f as never);
+    const body = JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.max_tokens).toBe(2000); expect(body.reasoning_effort).toBe("minimal");
+  });
+  it("reads reasoning tokens and derives visible output tokens", () => {
+    const u = readUsage({ usage: { prompt_tokens: 1008, completion_tokens: 1200, completion_tokens_details: { reasoning_tokens: 900 } } }, "length");
+    expect(u).toEqual({ prompt_tokens: 1008, completion_tokens: 1200, reasoning_tokens: 900, visible_output_tokens: 300, finish_reason: "length", max_tokens_sent: 2000 });
+  });
+  it("missing reasoning breakdown is reported as unknown, not zero", () => {
+    const u = readUsage({ usage: { completion_tokens: 50 } });
+    expect(u.reasoning_tokens).toBeUndefined(); expect(u.visible_output_tokens).toBeUndefined();
+  });
+  it("truncated reply is rejected even if content is valid JSON, with usage surfaced, no retry", async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(good(finId())) }, finish_reason: "length" }], usage: { prompt_tokens: 1008, completion_tokens: 2000, completion_tokens_details: { reasoning_tokens: 1800 } } })));
+    const r = await runMeta(req(FIN), READY, f as never);
+    expect(r.state).toBe("rejected"); expect(f).toHaveBeenCalledTimes(1);
+    if (r.state === "rejected") { expect(r.usage?.reasoning_tokens).toBe(1800); expect(r.errors[0]).toContain("max_tokens=2000"); }
+  });
+  it("compact schema limits enforced (counts & text length)", () => {
+    const o = good(finId());
+    expect(OutputSchema.safeParse({ ...o, observations: Array(LIMITS.observations + 1).fill(o.observations[0]) }).success).toBe(false);
+    expect(OutputSchema.safeParse({ ...o, missing_evidence: ["x".repeat(LIMITS.text + 1)] }).success).toBe(false);
+    expect(OutputSchema.safeParse(o).success).toBe(true);
+    expect(RESPONSE_FORMAT.json_schema.schema.properties.observations.maxItems).toBe(LIMITS.observations);
+  });
+  it("Paid-Social Surge × executive: valid compact reply passes; restricted role cannot cite hidden ids", async () => {
+    const s = SCENARIOS.find((x) => /paid/i.test(x.name))!;
+    const allIds = authorizedRecords(req(ALL, s.id)).map((r) => r.id);
+    expect((await runMeta(req(ALL, s.id), READY, mockFetch(good(allIds[0]!)) as never)).state).toBe("ok");
+    const hidden = s.records.find((r) => r.workspace !== "ws-finance")!.id;
+    expect((await runMeta(req(FIN, s.id), READY, mockFetch(good(hidden)) as never)).state).toBe("rejected");
+  });
+  it("logging never includes the key", async () => {
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    await runMeta(req(FIN), { ...READY, META_MODEL_API_KEY: "SECRET-XYZ" }, mockFetch(good(finId())) as never);
+    expect(JSON.stringify(spy.mock.calls)).not.toContain("SECRET-XYZ"); spy.mockRestore();
+  });
+});

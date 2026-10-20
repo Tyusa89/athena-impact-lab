@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { COMPANY, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "@/lib/athena/data";
 import { analyze, DEMO_QUESTION, type ChainStep } from "@/lib/athena/engine";
 import { PROVIDERS } from "@/lib/athena/provider";
-import { SCENARIOS as S2 } from "@/lib/athena/data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -66,7 +65,7 @@ function Index() {
   const provider = PROVIDERS.find((p) => p.id === providerId)!;
 
   const tests = useMemo(() => {
-    return S2.flatMap((s) =>
+    return SCENARIOS.flatMap((s) =>
       ROLES.map((r) => {
         const out = JSON.stringify(analyze(s.records, r.workspaces));
         const leaked = s.records.filter((x) => !r.workspaces.includes(x.workspace) && out.includes(x.id)).length;

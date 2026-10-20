@@ -175,3 +175,47 @@ describe("truncation fix — token accounting & compact schema", () => {
     expect(JSON.stringify(spy.mock.calls)).not.toContain("SECRET-XYZ"); spy.mockRestore();
   });
 });
+
+import { hasCausalClaim } from "./contract";
+
+describe("causal wording validator (Test 002 regression)", () => {
+  const exact = "Investigate fulfillment delays and backorder causes promptly";
+  it("exact Test 002 recommendation passes end-to-end", async () => {
+    const id = authorizedRecords(req(ALL))[0]!.id;
+    const o = good(id); o.recommendations[0]!.text = exact;
+    expect((await runMeta(req(ALL), READY, mockFetch(o) as never)).state).toBe("ok");
+  });
+  it.each([
+    exact,
+    "Identify the root cause of the conversion decline.",
+    "Review possible causes of longer fulfillment times.",
+    "Determine whether lead mix causes lower conversion.",
+    "Examine potential causes of the backorder rise.",
+  ])("investigative recommendation allowed: %s", (t) => expect(hasCausalClaim(t, true)).toBe(false));
+  it.each([
+    "Fulfillment delays caused the revenue drop.",
+    "Lead mix proves the conversion decline.",
+    "This proof is definitive: data proves it.",
+    "Backorders are the cause of lost sales.",
+    "Backorders is the cause of lost sales.",
+    "Higher leads causes lower conversion.",
+    "FULFILLMENT DELAYS CAUSED THE DROP.",
+    "Delays ca\u200Bused the drop.",
+    "Delays ｃａｕｓｅｄ the drop.",
+    "Data confirms that delays hurt sales.",
+    "Investigate delays. Backorder causes lost revenue.",
+  ])("strong/unsupported claim rejected in recommendations: %s", (t) => {
+    // "the cause of" without investigative cue: still rejected via CAUSE_WORD? only "cause" token
+    expect(hasCausalClaim(t, true)).toBe(true);
+  });
+  it("hypotheses and observations stay strict even with investigative wording", async () => {
+    expect(hasCausalClaim(exact, false)).toBe(true);
+    const id = authorizedRecords(req(ALL))[0]!.id;
+    const o = good(id); o.hypotheses[0]!.text = "Possible causes include delays.";
+    expect((await runMeta(req(ALL), READY, mockFetch(o) as never)).state).toBe("rejected");
+  });
+  it("investigative wording does not bypass citation checks", async () => {
+    const o = good("VH-FAKE-1"); o.recommendations[0]!.text = exact;
+    expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
+  });
+});

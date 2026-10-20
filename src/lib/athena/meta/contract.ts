@@ -87,7 +87,27 @@ export function buildMessages(question: string, records: EvidenceRecord[]) {
   ];
 }
 
-const CAUSAL = /\b(proves?|proven|caused|causes|is the cause|definitively|confirms that)\b/i;
+/** Always rejected, in every field: assertions of proven causality. */
+const STRONG_CAUSAL = /\b(proves?|proven|caused|is the cause|definitively|confirms that)\b/;
+/** "cause(s)" is a claim unless an investigative cue precedes it in the same sentence. */
+const CAUSE_WORD = /\bcauses?\b/;
+const INVESTIGATIVE = /\b(investigate|investigating|identify|examine|review|explore|assess|determine|diagnose|analy[sz]e|check|audit|verify|test|possible|potential|likely|underlying|root)\b/;
+
+/** Normalize to defeat case/width/zero-width obfuscation (NFKC, strip invisible chars, lowercase). */
+export const normalizeText = (t: string) => t.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\s+/g, " ").toLowerCase();
+
+/** Returns true if text makes an unsupported causal claim. Investigative wording is allowed only in
+ * recommendations and missing_evidence; observations and hypotheses stay strict (any "cause(s)" fails). */
+export function hasCausalClaim(text: string, allowInvestigative: boolean): boolean {
+  const t = normalizeText(text);
+  if (STRONG_CAUSAL.test(t)) return true;
+  for (const sentence of t.split(/[.!?;]+/)) {
+    const m = CAUSE_WORD.exec(sentence);
+    if (!m) continue;
+    if (!allowInvestigative || !INVESTIGATIVE.test(sentence.slice(0, m.index))) return true;
+  }
+  return false;
+}
 
 export type ValidationResult = { ok: true; output: MetaOutput } | { ok: false; errors: string[] };
 
@@ -105,6 +125,12 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   for (const id of new Set(cited)) if (!allowed.has(id)) errors.push(`Unsupported citation: ${id}`);
   const texts = [...out.observations.map((x) => x.text), ...out.hypotheses.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
   for (const r of hidden) if (texts.some((t) => t.includes(r.id) || t.includes(r.source))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
-  for (const t of texts) if (CAUSAL.test(t)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
+  const causalChecks: [string, boolean][] = [
+    ...out.observations.map((x) => [x.text, false] as [string, boolean]),
+    ...out.hypotheses.map((x) => [x.text, false] as [string, boolean]),
+    ...out.missing_evidence.map((x) => [x, true] as [string, boolean]),
+    ...out.recommendations.map((x) => [x.text, true] as [string, boolean]),
+  ];
+  for (const [t, inv] of causalChecks) if (hasCausalClaim(t, inv)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
   return errors.length ? { ok: false, errors } : { ok: true, output: out };
 }

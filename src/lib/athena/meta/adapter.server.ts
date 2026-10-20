@@ -3,7 +3,7 @@
 import { SCENARIOS } from "../data";
 import { DEMO_QUESTION } from "../engine";
 import {
-  META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
+  META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REASONING_EFFORT, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
   RequestSchema, authorizedRecords, buildMessages, estimateTokens, validateOutput, type MetaOutput,
 } from "./contract";
 
@@ -22,7 +22,24 @@ export type MetaResult =
   | { state: "error"; reason: string; requestSent: boolean; usage?: Usage | undefined }
   | { state: "rejected"; errors: string[]; requestSent: true; usage?: Usage | undefined }
   | { state: "ok"; output: MetaOutput; requestSent: true; usage?: Usage | undefined; authorizedIds: string[] };
-export type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+export type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; reasoning_tokens?: number; visible_output_tokens?: number; finish_reason?: string; max_tokens_sent: number };
+
+/** Build the outbound body. Exported for tests; the cap is clamped to the hard server constant. */
+export function buildBody(messages: unknown) {
+  return { model: META_MODEL, messages, max_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: REASONING_EFFORT, response_format: RESPONSE_FORMAT, stream: false };
+}
+
+export function readUsage(body: { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } }, finish?: string): Usage {
+  const u = body.usage ?? {};
+  const r = u.completion_tokens_details?.reasoning_tokens;
+  const out: Usage = { max_tokens_sent: MAX_OUTPUT_TOKENS };
+  if (u.prompt_tokens !== undefined) out.prompt_tokens = u.prompt_tokens;
+  if (u.completion_tokens !== undefined) out.completion_tokens = u.completion_tokens;
+  if (u.total_tokens !== undefined) out.total_tokens = u.total_tokens;
+  if (r !== undefined) { out.reasoning_tokens = r; if (u.completion_tokens !== undefined) out.visible_output_tokens = u.completion_tokens - r; }
+  if (finish) out.finish_reason = finish;
+  return out;
+}
 
 export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch): Promise<MetaResult> {
   const st = metaStatus(env);
@@ -44,7 +61,7 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
     res = await fetchImpl(META_ENDPOINT, {
       method: "POST",
       headers: { Authorization: `Bearer ${env.META_MODEL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: META_MODEL, messages, max_tokens: MAX_OUTPUT_TOKENS, response_format: RESPONSE_FORMAT, stream: false }),
+      body: JSON.stringify(buildBody(messages)),
       signal: ctrl.signal,
     });
   } catch (e) {
@@ -55,12 +72,14 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
     console.error("Meta API error status", res.status);
     return { state: "error", reason: `Meta API returned HTTP ${res.status} (not retried).`, requestSent: true };
   }
-  let body: { choices?: { message?: { content?: unknown }; finish_reason?: string }[]; usage?: Usage };
+  let body: { choices?: { message?: { content?: unknown }; finish_reason?: string }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
   try { body = await res.json(); } catch { return { state: "error", reason: "Response body is not JSON.", requestSent: true }; }
-  const usage = body.usage;
-  if ((usage?.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage };
   const choice = body.choices?.[0];
-  if (choice?.finish_reason === "length") return { state: "rejected", errors: ["Output truncated at token cap"], requestSent: true, usage };
+  const usage = readUsage(body, choice?.finish_reason);
+  // Redacted diagnostic log: token accounting only, never key, prompt or content.
+  console.info("Meta usage", JSON.stringify(usage));
+  if ((usage.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage };
+  if (choice?.finish_reason === "length") return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
   if (typeof choice?.message?.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
 
   const all = SCENARIOS.find((s) => s.id === req.data.scenarioId)!.records;

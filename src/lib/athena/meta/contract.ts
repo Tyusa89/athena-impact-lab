@@ -4,7 +4,10 @@
 // structured output via response_format { type: "json_schema", json_schema: { name, schema } },
 // response.choices[0].message.content, choices[0].finish_reason ("length" = hit token cap),
 // response.usage token counts (reasoning tokens count as output).
-// NOT verified: exact name of the output-cap parameter (we send OpenAI-style `max_tokens`) and pricing.
+// Verified (dev.meta.ai/docs/reasoning): `max_tokens` is the Chat Completions output cap; reasoning tokens count
+// toward it and are billed as output (usage.completion_tokens_details.reasoning_tokens). `reasoning_effort`
+// accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
+// NOT verified: pricing.
 import { z } from "zod";
 import { SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
@@ -12,7 +15,10 @@ import { filterVisible } from "../engine";
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
 export const MAX_INPUT_TOKENS = 3000;
-export const MAX_OUTPUT_TOKENS = 1200;
+/** Hard server cap sent as max_tokens. Includes hidden reasoning tokens. */
+export const MAX_OUTPUT_TOKENS = 2000;
+export const REASONING_EFFORT = "minimal" as const;
+export const LIMITS = { observations: 5, hypotheses: 3, missing: 4, recommendations: 3, text: 200, ids: 6 } as const;
 export const REQUEST_TIMEOUT_MS = 30_000;
 /** Synthetic-only allowlist: only these bundled scenario IDs can ever be sent. */
 export const SYNTHETIC_SCENARIO_ALLOWLIST: readonly string[] = SCENARIOS.map((s) => s.id);
@@ -28,17 +34,20 @@ export const RequestSchema = z.object({
 });
 export type MetaRequest = z.infer<typeof RequestSchema>;
 
-const ids = z.array(z.string()).min(1).max(20);
+const ids = z.array(z.string()).min(1).max(LIMITS.ids);
+const txt = z.string().min(1).max(LIMITS.text);
 export const OutputSchema = z
   .object({
-    observations: z.array(z.object({ text: z.string().max(400), cited_ids: ids }).strict()).max(10),
-    hypotheses: z.array(z.object({ text: z.string().max(400), verified: z.literal(false), cited_ids: ids }).strict()).max(6),
-    missing_evidence: z.array(z.string().max(300)).max(8),
-    recommendations: z.array(z.object({ text: z.string().max(300), requires_human_approval: z.literal(true), cited_ids: ids }).strict()).max(6),
+    observations: z.array(z.object({ text: txt, cited_ids: ids }).strict()).max(LIMITS.observations),
+    hypotheses: z.array(z.object({ text: txt, verified: z.literal(false), cited_ids: ids }).strict()).max(LIMITS.hypotheses),
+    missing_evidence: z.array(txt).max(LIMITS.missing),
+    recommendations: z.array(z.object({ text: txt, requires_human_approval: z.literal(true), cited_ids: ids }).strict()).max(LIMITS.recommendations),
   })
   .strict();
 export type MetaOutput = z.infer<typeof OutputSchema>;
 
+const T = { type: "string", maxLength: LIMITS.text } as const;
+const I = { type: "array", minItems: 1, maxItems: LIMITS.ids, items: { type: "string" } } as const;
 /** JSON schema sent as response_format (mirrors OutputSchema). */
 export const RESPONSE_FORMAT = {
   type: "json_schema",
@@ -49,10 +58,10 @@ export const RESPONSE_FORMAT = {
       additionalProperties: false,
       required: ["observations", "hypotheses", "missing_evidence", "recommendations"],
       properties: {
-        observations: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "cited_ids"], properties: { text: { type: "string" }, cited_ids: { type: "array", items: { type: "string" } } } } },
-        hypotheses: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "verified", "cited_ids"], properties: { text: { type: "string" }, verified: { type: "boolean", enum: [false] }, cited_ids: { type: "array", items: { type: "string" } } } } },
-        missing_evidence: { type: "array", items: { type: "string" } },
-        recommendations: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "cited_ids"], properties: { text: { type: "string" }, requires_human_approval: { type: "boolean", enum: [true] }, cited_ids: { type: "array", items: { type: "string" } } } } },
+        observations: { type: "array", maxItems: LIMITS.observations, items: { type: "object", additionalProperties: false, required: ["text", "cited_ids"], properties: { text: T, cited_ids: I } } },
+        hypotheses: { type: "array", maxItems: LIMITS.hypotheses, items: { type: "object", additionalProperties: false, required: ["text", "verified", "cited_ids"], properties: { text: T, verified: { type: "boolean", enum: [false] }, cited_ids: I } } },
+        missing_evidence: { type: "array", maxItems: LIMITS.missing, items: T },
+        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "cited_ids"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, cited_ids: I } } },
       },
     },
   },
@@ -71,7 +80,7 @@ export function buildMessages(question: string, records: EvidenceRecord[]) {
     "You analyse SYNTHETIC business records for a fictional company. Use ONLY the records provided. " +
     "Cite record ids exactly as given in cited_ids. Never cite ids not in the input. Do not claim causation or proof; " +
     "hypotheses are unverified co-movement. Recommendations are proposals that require human approval; you cannot execute actions. " +
-    "If evidence is missing, list it in missing_evidence.";
+    "If evidence is missing, list it in missing_evidence. BE TERSE: at most " + `${LIMITS.observations} observations, ${LIMITS.hypotheses} hypotheses, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
   return [
     { role: "system" as const, content: system },
     { role: "user" as const, content: `Question: ${question}\nRecords (JSON): ${JSON.stringify(rows)}` },

@@ -37,7 +37,7 @@ export function MetaPanel({ scenarioId, workspaces, analysis }: { scenarioId: st
       <ul className="space-y-1 rounded-md bg-secondary p-3 text-xs">
         <Row k="Server key META_MODEL_API_KEY configured" ok={status?.keyConfigured} />
         <Row k="Owner activation META_MODEL_ENABLED=true" ok={status?.ownerEnabled} />
-        <li className="flex justify-between text-muted-foreground"><span>Token budget (input / output)</span><span>{status ? `${status.maxInputTokens} / ${status.maxOutputTokens}` : "—"}</span></li>
+        <li className="flex justify-between text-muted-foreground"><span>Hard token cap (input / output incl. hidden reasoning)</span><span>{status ? `${status.maxInputTokens} / ${status.maxOutputTokens}` : "—"}</span></li>
         <li className="flex justify-between text-muted-foreground"><span>Cost per run</span><span>Unknown — pricing not verified</span></li>
       </ul>
       <label className="flex items-start gap-2 text-xs">
@@ -73,7 +73,7 @@ export function MetaPanel({ scenarioId, workspaces, analysis }: { scenarioId: st
               <ul className="list-disc pl-4">{result.output.recommendations.map((o) => <li key={o.text}>{o.text} <i className="text-muted-foreground">(needs human approval; not executable)</i></li>)}</ul>
             </div>
           )}
-          {result && "usage" in result && result.usage && <p className="mt-2 text-[10px] text-muted-foreground">Tokens used: {result.usage.prompt_tokens ?? "?"} in / {result.usage.completion_tokens ?? "?"} out</p>}
+          {result && "usage" in result && result.usage && <p className="mt-2 text-[10px] text-muted-foreground">Tokens: {result.usage.prompt_tokens ?? "?"} in / {result.usage.completion_tokens ?? "?"} out of {result.usage.max_tokens_sent} cap (hidden reasoning: {result.usage.reasoning_tokens ?? "not reported"}; visible: {result.usage.visible_output_tokens ?? "?"}) · finish: {result.usage.finish_reason ?? "?"}</p>}
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { SCENARIOS, ROLES } from "./data";
 import { analyze } from "./engine";
 import { metaProviderStub } from "./provider";
 
-const all = ROLES[0].workspaces;
+const all = ROLES[0]!.workspaces;
 const sc = (id: string) => SCENARIOS.find((s) => s.id === id)!;
 
 describe("Athena engine", () => {

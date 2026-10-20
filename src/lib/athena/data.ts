@@ -84,7 +84,7 @@ export const SCENARIOS: Scenario[] = [
       ["mql_rate", "Marketing", "ws-marketing", "SYN-CRM Lead Scoring", 33, 24, "%"],
       ["conversion_rate", "Sales", "ws-sales", "SYN-Pipeline Snapshot", 9.0, 6.1, "%"],
       ["closed_deals", "Sales", "ws-sales", "SYN-Pipeline Snapshot", 360, 342, "deals"],
-      ["fulfillment_days", "Operations", "ws-ops", "SYN-WMS Shipment Log", 3.0, 3.2, "days"],
+      ["fulfillment_days", "Operations", "ws-ops", "SYN-WMS Shipment Log", 3.1, 3.1, "days"],
       ["backorder_rate", "Operations", "ws-ops", "SYN-WMS Inventory Report", 4, 4, "%"],
       ["revenue", "Finance", "ws-finance", "SYN-GL Revenue Summary", 1_150_000, 1_096_000, "USD"],
     ]),

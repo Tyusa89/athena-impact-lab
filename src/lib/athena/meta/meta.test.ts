@@ -6,7 +6,7 @@ import { authorizedRecords, META_ENDPOINT, MAX_OUTPUT_TOKENS } from "./contract"
 const READY = { META_MODEL_API_KEY: "test-key", META_MODEL_ENABLED: "true" };
 const ALL = ROLES[0]!.workspaces;
 const FIN = ROLES.find((r) => r.id === "finance")!.workspaces;
-const req = (workspaces: string[] = ALL, scenarioId = "baseline") => ({ scenarioId, workspaces, ownerConfirmed: true });
+const req = (roleId: string = "exec", scenarioId = "baseline") => ({ scenarioId, roleId, ownerConfirmed: true });
 
 function mockFetch(content: unknown, extra: Record<string, unknown> = {}) {
   return vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) }, finish_reason: "stop" }], usage: { prompt_tokens: 500, completion_tokens: 200, total_tokens: 700 }, ...extra }), { status: 200 }));
@@ -35,18 +35,18 @@ describe("meta gating — no outbound calls", () => {
   });
   it("missing owner confirmation blocks", async () => {
     const f = vi.fn();
-    expect((await runMeta({ scenarioId: "baseline", workspaces: ALL }, READY, f as never)).state).toBe("blocked");
+    expect((await runMeta({ scenarioId: "baseline", roleId: "exec" }, READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
   it("non-allowlisted scenario and unknown workspace are blocked", async () => {
     const f = vi.fn();
     expect((await runMeta(req("exec", "econest-prod"), READY, f as never)).state).toBe("blocked");
-    expect((await runMeta(req(["ws-hr"]), READY, f as never)).state).toBe("blocked");
+    expect((await runMeta(req("hr-admin"), READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
-  it("empty authorized workspace set sends nothing", async () => {
+  it("missing role sends nothing", async () => {
     const f = vi.fn();
-    expect((await runMeta(req([]), READY, f as never)).state).toBe("blocked");
+    expect((await runMeta({ scenarioId: "baseline", ownerConfirmed: true }, READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
 });
@@ -176,7 +176,7 @@ describe("truncation fix — token accounting & compact schema", () => {
   });
 });
 
-import { hasCausalClaim } from "./contract";
+import { hasCausalClaim, SERVER_ROLE_WORKSPACES, workspacesForRole } from "./contract";
 
 describe("causal wording validator (Test 002 regression)", () => {
   const exact = "Investigate fulfillment delays and backorder causes promptly";
@@ -242,25 +242,47 @@ describe("Marketing Manager × Scenario A — local role-filter audit (no networ
     const p = (await sentPrompt(req("marketing")))!;
     for (const r of A.records) { expect(p).not.toContain(r.source); if (r.note) expect(p).not.toContain(r.note); }
   });
-  it("extra client fields (forged role label) are ignored; only workspaces matter", async () => {
-    const p = (await sentPrompt({ ...req("marketing"), role: "exec", records: A.records }))!;
-    const ops = A.records.find((r) => r.workspace === "ws-ops")!;
-    expect(p).not.toContain(ops.id);
+  it("forged workspaces/records/role claims are ignored — scope comes only from server role map", async () => {
+    const ops = A.records.find((r) => r.workspace === "ws-ops")!, fin = A.records.find((r) => r.workspace === "ws-finance")!;
+    for (const forged of [
+      { ...req("marketing"), workspaces: ["ws-marketing", "ws-sales", "ws-ops", "ws-finance"] },
+      { ...req("marketing"), records: A.records, role: "exec", isAdmin: true },
+      { ...req("marketing"), authorizedIds: A.records.map((r) => r.id) },
+    ]) {
+      const p = (await sentPrompt(forged))!;
+      expect(p).not.toContain(ops.id); expect(p).not.toContain(fin.id);
+    }
   });
-  it("LIMITATION: a forged workspace list is trusted — client can claim all workspaces", async () => {
-    const p = (await sentPrompt(req(["ws-marketing", "ws-sales", "ws-ops", "ws-finance"])))!;
-    expect(p).toContain(A.records.find((r) => r.workspace === "ws-finance")!.id);
+  it.each([undefined, "", "custom", "EXEC", "exec ", "__proto__", "constructor", "toString", 7, null])("unknown/missing role %s fails closed with no request", async (roleId) => {
+    const f = vi.fn();
+    expect((await runMeta({ scenarioId: "baseline", roleId, ownerConfirmed: true }, READY, f as never)).state).toBe("blocked");
+    expect(f).not.toHaveBeenCalled();
   });
-  it("unknown, missing or malformed workspace input is blocked with no request", async () => {
-    for (const bad of [{ scenarioId: "baseline", ownerConfirmed: true }, req(["ws-hr"]), req(["WS-MARKETING"]), { ...req("marketing"), workspaces: "ws-marketing" }]) {
+  it("server role map matches UI roles and is frozen", () => {
+    expect(SERVER_ROLE_WORKSPACES).toEqual(Object.fromEntries(ROLES.map((r) => [r.id, r.workspaces])));
+    expect(SERVER_ROLE_WORKSPACES["exec"]).toEqual(["ws-marketing", "ws-sales", "ws-ops", "ws-finance"]);
+    expect(Object.isFrozen(SERVER_ROLE_WORKSPACES) && Object.isFrozen(SERVER_ROLE_WORKSPACES["exec"])).toBe(true);
+  });
+  it("mutating the UI ROLES array at runtime cannot widen server scope", () => {
+    const mk = ROLES.find((r) => r.id === "marketing")!;
+    mk.workspaces.push("ws-finance");
+    try { expect(workspacesForRole("marketing")).toEqual(["ws-marketing", "ws-sales"]); }
+    finally { mk.workspaces.pop(); }
+  });
+  it.each(ROLES.map((r) => r.id))("role %s: every scenario sends exactly its server-mapped records", async (roleId) => {
+    for (const s of SCENARIOS) {
+      const f = mockFetch(good(authorizedRecords(req(roleId, s.id))[0]!.id));
+      await runMeta(req(roleId, s.id), READY, f as never);
+      const p = JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).messages[1].content as string;
+      for (const r of s.records) expect(p.includes(r.id)).toBe(workspacesForRole(roleId).includes(r.workspace));
+    }
+  });
+  it("unknown, missing or malformed role/scenario input is blocked with no request", async () => {
+    for (const bad of [{ scenarioId: "baseline", ownerConfirmed: true }, req("ws-marketing"), req("Marketing"), { ...req("marketing"), scenarioId: "real-econest" }]) {
       const f = vi.fn();
       expect((await runMeta(bad, READY, f as never)).state).toBe("blocked");
       expect(f).not.toHaveBeenCalled();
     }
-  });
-  it("duplicated workspace entries do not widen access", async () => {
-    const p = (await sentPrompt(req(["ws-marketing", "ws-marketing", "ws-sales"])))!;
-    expect(p).not.toContain(A.records.find((r) => r.workspace === "ws-ops")!.id);
   });
   it.each(["ws-ops", "ws-finance"])("response citing or naming a hidden %s record is rejected", async (ws) => {
     const hidden = A.records.find((r) => r.workspace === ws)!;

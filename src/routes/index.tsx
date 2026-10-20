@@ -5,6 +5,7 @@ import { analyze, filterVisible, DEMO_QUESTION, type Signal } from "@/lib/athena
 import { approvalReducer, decisionOf } from "@/lib/athena/approvals";
 import { useReducer } from "react";
 import { PROVIDERS } from "@/lib/athena/provider";
+import { MetaPanel } from "@/components/MetaPanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -231,6 +232,10 @@ function Index() {
             </p>
           </Section>
         </div>
+
+        <Section title="Deterministic vs Meta comparison" tag="disabled unless owner-activated">
+          <MetaPanel scenarioId={scenarioId} workspaces={ws} analysis={a} />
+        </Section>
 
         <Section title="Permission leak checks (live, in-browser)" tag={`${tests.filter((t) => t.pass).length}/${tests.length} passing`}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

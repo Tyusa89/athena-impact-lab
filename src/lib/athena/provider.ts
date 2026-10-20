@@ -14,8 +14,8 @@ export const deterministicProvider: ModelProvider = {
   label: "Deterministic demo engine (rules)",
   status: "active",
   async summarize(a) {
-    const s = a.chain.filter((c) => c.status === "supported").map((c) => c.title.toLowerCase());
-    return { text: s.length ? `Supported links: ${s.join(" → ")}.` : "No chain links supported by visible evidence.", citedIds: a.citedIds };
+    const s = a.signals.filter((c) => c.status === "observed").map((c) => c.title.toLowerCase());
+    return { text: s.length ? `Observed signals: ${s.join("; ")}. Causal links unverified.` : "No expected signals observed in visible records.", citedIds: a.citedIds };
   },
 };
 

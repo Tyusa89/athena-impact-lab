@@ -54,7 +54,7 @@ function fmt(r: { value: number; unit: string }) {
 
 function Index() {
   const [scenarioId, setScenarioId] = useState(SCENARIOS[0]!.id);
-  const [roleId, setRoleId] = useState(ROLES[0].id);
+  const [roleId, setRoleId] = useState(ROLES[0]!.id);
   const [ws, setWs] = useState<string[]>(ROLES[0]!.workspaces);
   const [approvals, setApprovals] = useState<Record<string, "approved" | "rejected">>({});
   const [providerId, setProviderId] = useState("deterministic");

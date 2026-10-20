@@ -11,7 +11,7 @@ export interface EvidenceRecord {
   period: "prior" | "current";
   value: number;
   unit: string;
-  note?: string;
+  note?: string | undefined;
 }
 
 export type MetricKey =

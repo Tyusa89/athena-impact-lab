@@ -1,0 +1,32 @@
+// Model provider interface for future integration. NO live calls are made.
+import type { Analysis } from "./engine";
+
+export interface ModelProvider {
+  id: string;
+  label: string;
+  status: "active" | "not-configured";
+  /** Optional narrative layer over the deterministic analysis. Must cite only analysis.citedIds. */
+  summarize(analysis: Analysis): Promise<{ text: string; citedIds: string[] } | null>;
+}
+
+export const deterministicProvider: ModelProvider = {
+  id: "deterministic",
+  label: "Deterministic demo engine (rules)",
+  status: "active",
+  async summarize(a) {
+    const s = a.chain.filter((c) => c.status === "supported").map((c) => c.title.toLowerCase());
+    return { text: s.length ? `Supported links: ${s.join(" → ")}.` : "No chain links supported by visible evidence.", citedIds: a.citedIds };
+  },
+};
+
+/** Placeholder for a future Meta model provider. Not integrated; never returns fabricated output. */
+export const metaProviderStub: ModelProvider = {
+  id: "meta-future",
+  label: "Meta model provider (future — not integrated)",
+  status: "not-configured",
+  async summarize() {
+    return null;
+  },
+};
+
+export const PROVIDERS = [deterministicProvider, metaProviderStub];

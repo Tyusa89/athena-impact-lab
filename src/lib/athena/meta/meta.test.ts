@@ -6,7 +6,7 @@ import { authorizedRecords, META_ENDPOINT, MAX_OUTPUT_TOKENS } from "./contract"
 const READY = { META_MODEL_API_KEY: "test-key", META_MODEL_ENABLED: "true" };
 const ALL = ROLES[0]!.workspaces;
 const FIN = ROLES.find((r) => r.id === "finance")!.workspaces;
-const req = (workspaces: string[] = ALL, scenarioId = "baseline") => ({ scenarioId, workspaces, ownerConfirmed: true });
+const req = (roleId: string = "exec", scenarioId = "baseline") => ({ scenarioId, roleId, ownerConfirmed: true });
 
 function mockFetch(content: unknown, extra: Record<string, unknown> = {}) {
   return vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) }, finish_reason: "stop" }], usage: { prompt_tokens: 500, completion_tokens: 200, total_tokens: 700 }, ...extra }), { status: 200 }));
@@ -35,27 +35,27 @@ describe("meta gating — no outbound calls", () => {
   });
   it("missing owner confirmation blocks", async () => {
     const f = vi.fn();
-    expect((await runMeta({ scenarioId: "baseline", workspaces: ALL }, READY, f as never)).state).toBe("blocked");
+    expect((await runMeta({ scenarioId: "baseline", roleId: "exec" }, READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
   it("non-allowlisted scenario and unknown workspace are blocked", async () => {
     const f = vi.fn();
-    expect((await runMeta(req(ALL, "econest-prod"), READY, f as never)).state).toBe("blocked");
-    expect((await runMeta(req(["ws-hr"]), READY, f as never)).state).toBe("blocked");
+    expect((await runMeta(req("exec", "econest-prod"), READY, f as never)).state).toBe("blocked");
+    expect((await runMeta(req("hr-admin"), READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
-  it("empty authorized workspace set sends nothing", async () => {
+  it("missing role sends nothing", async () => {
     const f = vi.fn();
-    expect((await runMeta(req([]), READY, f as never)).state).toBe("blocked");
+    expect((await runMeta({ scenarioId: "baseline", ownerConfirmed: true }, READY, f as never)).state).toBe("blocked");
     expect(f).not.toHaveBeenCalled();
   });
 });
 
 describe("meta request shape & role restrictions", () => {
   it("sends one request, only authorized records, with token cap", async () => {
-    const id = authorizedRecords(req(FIN))[0]!.id;
+    const id = authorizedRecords(req("finance"))[0]!.id;
     const f = mockFetch(good(id));
-    const r = await runMeta(req(FIN), READY, f as never);
+    const r = await runMeta(req("finance"), READY, f as never);
     expect(r.state).toBe("ok");
     expect(f).toHaveBeenCalledTimes(1);
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
@@ -77,47 +77,47 @@ describe("meta request shape & role restrictions", () => {
 });
 
 describe("meta output validation", () => {
-  const finId = () => authorizedRecords(req(FIN))[0]!.id;
-  it("malformed JSON rejected", async () => expect((await runMeta(req(FIN), READY, mockFetch("not json {") as never)).state).toBe("rejected"));
+  const finId = () => authorizedRecords(req("finance"))[0]!.id;
+  it("malformed JSON rejected", async () => expect((await runMeta(req("finance"), READY, mockFetch("not json {") as never)).state).toBe("rejected"));
   it("missing fields / extra fields rejected", async () => {
-    expect((await runMeta(req(FIN), READY, mockFetch({ observations: [] }) as never)).state).toBe("rejected");
-    expect((await runMeta(req(FIN), READY, mockFetch({ ...good(finId()), execute: true }) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch({ observations: [] }) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch({ ...good(finId()), execute: true }) as never)).state).toBe("rejected");
   });
   it("hallucinated citation rejected", async () => {
     const o = good(finId()); o.observations[0]!.cited_ids = ["VH-FAKE-999"];
-    const r = await runMeta(req(FIN), READY, mockFetch(o) as never);
+    const r = await runMeta(req("finance"), READY, mockFetch(o) as never);
     expect(r.state).toBe("rejected"); if (r.state === "rejected") expect(r.errors.join()).toContain("VH-FAKE-999");
   });
   it("citing a real but unauthorized record is rejected (cross-workspace)", async () => {
     const hidden = SCENARIOS[0]!.records.find((x) => x.workspace === "ws-marketing")!.id;
     const o = good(finId()); o.hypotheses[0]!.cited_ids = [hidden];
-    expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("mentioning an unauthorized record in text is rejected", async () => {
     const hidden = SCENARIOS[0]!.records.find((x) => x.workspace === "ws-sales")!;
     const o = good(finId()); o.missing_evidence = [`See ${hidden.id}`];
-    expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("verified hypothesis or auto-executed recommendation rejected", async () => {
     const a = good(finId()) as any; a.hypotheses[0].verified = true;
     const b = good(finId()) as any; b.recommendations[0].requires_human_approval = false;
-    expect((await runMeta(req(FIN), READY, mockFetch(a) as never)).state).toBe("rejected");
-    expect((await runMeta(req(FIN), READY, mockFetch(b) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(a) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(b) as never)).state).toBe("rejected");
   });
   it("causal-proof language rejected", async () => {
     const o = good(finId()); o.observations[0]!.text = "Fulfillment delays caused the revenue drop.";
-    expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("truncated or over-budget output rejected", async () => {
     const t = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "length" }] })));
-    expect((await runMeta(req(FIN), READY, t as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, t as never)).state).toBe("rejected");
     const big = mockFetch(good(finId()), { usage: { completion_tokens: MAX_OUTPUT_TOKENS + 1 } });
-    expect((await runMeta(req(FIN), READY, big as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, big as never)).state).toBe("rejected");
   });
   it("every role × scenario: valid output passes only with authorized ids", async () => {
     for (const s of SCENARIOS) for (const role of ROLES) {
-      const recs = authorizedRecords(req(role.workspaces, s.id));
-      const r = await runMeta(req(role.workspaces, s.id), READY, mockFetch(good(recs[0]!.id)) as never);
+      const recs = authorizedRecords(req(role.id, s.id));
+      const r = await runMeta(req(role.id, s.id), READY, mockFetch(good(recs[0]!.id)) as never);
       expect(r.state).toBe("ok");
       if (r.state === "ok") for (const id of r.authorizedIds) expect(role.workspaces).toContain(s.records.find((x) => x.id === id)!.workspace);
     }
@@ -128,7 +128,7 @@ import { buildBody, readUsage } from "./adapter.server";
 import { LIMITS, OutputSchema, RESPONSE_FORMAT, REASONING_EFFORT } from "./contract";
 
 describe("truncation fix — token accounting & compact schema", () => {
-  const finId = () => authorizedRecords(req(FIN))[0]!.id;
+  const finId = () => authorizedRecords(req("finance"))[0]!.id;
   it("body sends hard cap 2000 as max_tokens and minimal reasoning effort", () => {
     const b = buildBody([]);
     expect(b.max_tokens).toBe(2000); expect(MAX_OUTPUT_TOKENS).toBe(2000);
@@ -137,7 +137,7 @@ describe("truncation fix — token accounting & compact schema", () => {
   });
   it("sent request body carries the exact cap", async () => {
     const f = mockFetch(good(finId()));
-    await runMeta(req(FIN), READY, f as never);
+    await runMeta(req("finance"), READY, f as never);
     const body = JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
     expect(body.max_tokens).toBe(2000); expect(body.reasoning_effort).toBe("minimal");
   });
@@ -151,7 +151,7 @@ describe("truncation fix — token accounting & compact schema", () => {
   });
   it("truncated reply is rejected even if content is valid JSON, with usage surfaced, no retry", async () => {
     const f = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(good(finId())) }, finish_reason: "length" }], usage: { prompt_tokens: 1008, completion_tokens: 2000, completion_tokens_details: { reasoning_tokens: 1800 } } })));
-    const r = await runMeta(req(FIN), READY, f as never);
+    const r = await runMeta(req("finance"), READY, f as never);
     expect(r.state).toBe("rejected"); expect(f).toHaveBeenCalledTimes(1);
     if (r.state === "rejected") { expect(r.usage?.reasoning_tokens).toBe(1800); expect(r.errors[0]).toContain("max_tokens=2000"); }
   });
@@ -164,26 +164,26 @@ describe("truncation fix — token accounting & compact schema", () => {
   });
   it("Baseline (paid-social surge) × executive: valid compact reply passes; restricted role cannot cite hidden ids", async () => {
     const s = SCENARIOS.find((x) => x.id === "baseline")!;
-    const allIds = authorizedRecords(req(ALL, s.id)).map((r) => r.id);
-    expect((await runMeta(req(ALL, s.id), READY, mockFetch(good(allIds[0]!)) as never)).state).toBe("ok");
+    const allIds = authorizedRecords(req("exec", s.id)).map((r) => r.id);
+    expect((await runMeta(req("exec", s.id), READY, mockFetch(good(allIds[0]!)) as never)).state).toBe("ok");
     const hidden = s.records.find((r) => r.workspace !== "ws-finance")!.id;
-    expect((await runMeta(req(FIN, s.id), READY, mockFetch(good(hidden)) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance", s.id), READY, mockFetch(good(hidden)) as never)).state).toBe("rejected");
   });
   it("logging never includes the key", async () => {
     const spy = vi.spyOn(console, "info").mockImplementation(() => {});
-    await runMeta(req(FIN), { ...READY, META_MODEL_API_KEY: "SECRET-XYZ" }, mockFetch(good(finId())) as never);
+    await runMeta(req("finance"), { ...READY, META_MODEL_API_KEY: "SECRET-XYZ" }, mockFetch(good(finId())) as never);
     expect(JSON.stringify(spy.mock.calls)).not.toContain("SECRET-XYZ"); spy.mockRestore();
   });
 });
 
-import { hasCausalClaim } from "./contract";
+import { hasCausalClaim, SERVER_ROLE_WORKSPACES, workspacesForRole } from "./contract";
 
 describe("causal wording validator (Test 002 regression)", () => {
   const exact = "Investigate fulfillment delays and backorder causes promptly";
   it("exact Test 002 recommendation passes end-to-end", async () => {
-    const id = authorizedRecords(req(ALL))[0]!.id;
+    const id = authorizedRecords(req("exec"))[0]!.id;
     const o = good(id); o.recommendations[0]!.text = exact;
-    expect((await runMeta(req(ALL), READY, mockFetch(o) as never)).state).toBe("ok");
+    expect((await runMeta(req("exec"), READY, mockFetch(o) as never)).state).toBe("ok");
   });
   it.each([
     exact,
@@ -210,13 +210,13 @@ describe("causal wording validator (Test 002 regression)", () => {
   });
   it("hypotheses and observations stay strict even with investigative wording", async () => {
     expect(hasCausalClaim(exact, false)).toBe(true);
-    const id = authorizedRecords(req(ALL))[0]!.id;
+    const id = authorizedRecords(req("exec"))[0]!.id;
     const o = good(id); o.hypotheses[0]!.text = "Possible causes include delays.";
-    expect((await runMeta(req(ALL), READY, mockFetch(o) as never)).state).toBe("rejected");
+    expect((await runMeta(req("exec"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("investigative wording does not bypass citation checks", async () => {
     const o = good("VH-FAKE-1"); o.recommendations[0]!.text = exact;
-    expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
+    expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
 });
 
@@ -224,7 +224,7 @@ describe("Marketing Manager × Scenario A — local role-filter audit (no networ
   const MKT = ROLES.find((r) => r.id === "marketing")!.workspaces;
   const A = SCENARIOS.find((s) => s.id === "baseline")!;
   const sentPrompt = async (input: unknown) => {
-    const f = mockFetch(good(authorizedRecords(req(MKT))[0]!.id));
+    const f = mockFetch(good(authorizedRecords(req("marketing"))[0]!.id));
     await runMeta(input, READY, f as never);
     return f.mock.calls.length ? ((JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).messages[1].content) as string) : null;
   };
@@ -232,48 +232,70 @@ describe("Marketing Manager × Scenario A — local role-filter audit (no networ
     expect([...MKT].sort()).toEqual(["ws-marketing", "ws-sales"]);
   });
   it("prompt contains every authorized record and no Operations/Finance id or source", async () => {
-    const p = (await sentPrompt(req(MKT)))!;
+    const p = (await sentPrompt(req("marketing")))!;
     for (const r of A.records) {
       if (MKT.includes(r.workspace)) expect(p).toContain(r.id);
       else { expect(p).not.toContain(r.id); expect(p).not.toContain(r.source); }
     }
   });
   it("prompt never includes source names or notes (only id/department/date/metric/period/value/unit)", async () => {
-    const p = (await sentPrompt(req(MKT)))!;
+    const p = (await sentPrompt(req("marketing")))!;
     for (const r of A.records) { expect(p).not.toContain(r.source); if (r.note) expect(p).not.toContain(r.note); }
   });
-  it("extra client fields (forged role label) are ignored; only workspaces matter", async () => {
-    const p = (await sentPrompt({ ...req(MKT), role: "exec", records: A.records }))!;
-    const ops = A.records.find((r) => r.workspace === "ws-ops")!;
-    expect(p).not.toContain(ops.id);
+  it("forged workspaces/records/role claims are ignored — scope comes only from server role map", async () => {
+    const ops = A.records.find((r) => r.workspace === "ws-ops")!, fin = A.records.find((r) => r.workspace === "ws-finance")!;
+    for (const forged of [
+      { ...req("marketing"), workspaces: ["ws-marketing", "ws-sales", "ws-ops", "ws-finance"] },
+      { ...req("marketing"), records: A.records, role: "exec", isAdmin: true },
+      { ...req("marketing"), authorizedIds: A.records.map((r) => r.id) },
+    ]) {
+      const p = (await sentPrompt(forged))!;
+      expect(p).not.toContain(ops.id); expect(p).not.toContain(fin.id);
+    }
   });
-  it("LIMITATION: a forged workspace list is trusted — client can claim all workspaces", async () => {
-    const p = (await sentPrompt(req(["ws-marketing", "ws-sales", "ws-ops", "ws-finance"])))!;
-    expect(p).toContain(A.records.find((r) => r.workspace === "ws-finance")!.id);
+  it.each([undefined, "", "custom", "EXEC", "exec ", "__proto__", "constructor", "toString", 7, null])("unknown/missing role %s fails closed with no request", async (roleId) => {
+    const f = vi.fn();
+    expect((await runMeta({ scenarioId: "baseline", roleId, ownerConfirmed: true }, READY, f as never)).state).toBe("blocked");
+    expect(f).not.toHaveBeenCalled();
   });
-  it("unknown, missing or malformed workspace input is blocked with no request", async () => {
-    for (const bad of [{ scenarioId: "baseline", ownerConfirmed: true }, req(["ws-hr"]), req(["WS-MARKETING"]), { ...req(MKT), workspaces: "ws-marketing" }]) {
+  it("server role map matches UI roles and is frozen", () => {
+    expect(SERVER_ROLE_WORKSPACES).toEqual(Object.fromEntries(ROLES.map((r) => [r.id, r.workspaces])));
+    expect(SERVER_ROLE_WORKSPACES["exec"]).toEqual(["ws-marketing", "ws-sales", "ws-ops", "ws-finance"]);
+    expect(Object.isFrozen(SERVER_ROLE_WORKSPACES) && Object.isFrozen(SERVER_ROLE_WORKSPACES["exec"])).toBe(true);
+  });
+  it("mutating the UI ROLES array at runtime cannot widen server scope", () => {
+    const mk = ROLES.find((r) => r.id === "marketing")!;
+    mk.workspaces.push("ws-finance");
+    try { expect(workspacesForRole("marketing")).toEqual(["ws-marketing", "ws-sales"]); }
+    finally { mk.workspaces.pop(); }
+  });
+  it.each(ROLES.map((r) => r.id))("role %s: every scenario sends exactly its server-mapped records", async (roleId) => {
+    for (const s of SCENARIOS) {
+      const f = mockFetch(good(authorizedRecords(req(roleId, s.id))[0]!.id));
+      await runMeta(req(roleId, s.id), READY, f as never);
+      const p = JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).messages[1].content as string;
+      for (const r of s.records) expect(p.includes(r.id)).toBe(workspacesForRole(roleId).includes(r.workspace));
+    }
+  });
+  it("unknown, missing or malformed role/scenario input is blocked with no request", async () => {
+    for (const bad of [{ scenarioId: "baseline", ownerConfirmed: true }, req("ws-marketing"), req("Marketing"), { ...req("marketing"), scenarioId: "real-econest" }]) {
       const f = vi.fn();
       expect((await runMeta(bad, READY, f as never)).state).toBe("blocked");
       expect(f).not.toHaveBeenCalled();
     }
   });
-  it("duplicated workspace entries do not widen access", async () => {
-    const p = (await sentPrompt(req(["ws-marketing", "ws-marketing", "ws-sales"])))!;
-    expect(p).not.toContain(A.records.find((r) => r.workspace === "ws-ops")!.id);
-  });
   it.each(["ws-ops", "ws-finance"])("response citing or naming a hidden %s record is rejected", async (ws) => {
     const hidden = A.records.find((r) => r.workspace === ws)!;
-    const ok = authorizedRecords(req(MKT))[0]!.id;
+    const ok = authorizedRecords(req("marketing"))[0]!.id;
     const c = good(ok); c.observations[0]!.cited_ids = [hidden.id];
     const n = good(ok); n.missing_evidence = [`Need ${hidden.id}`];
     const s = good(ok); s.recommendations[0]!.text = `Check ${hidden.source} data.`;
-    for (const o of [c, n, s]) expect((await runMeta(req(MKT), READY, mockFetch(o) as never)).state).toBe("rejected");
+    for (const o of [c, n, s]) expect((await runMeta(req("marketing"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("valid reply citing only Marketing/Sales records passes", async () => {
-    const ids = authorizedRecords(req(MKT)).map((r) => r.id);
+    const ids = authorizedRecords(req("marketing")).map((r) => r.id);
     const o = good(ids[0]!); o.observations[0]!.cited_ids = ids.slice(0, 6);
-    const r = await runMeta(req(MKT), READY, mockFetch(o) as never);
+    const r = await runMeta(req("marketing"), READY, mockFetch(o) as never);
     expect(r.state).toBe("ok");
     if (r.state === "ok") expect(r.authorizedIds.every((id) => MKT.includes(A.records.find((x) => x.id === id)!.workspace))).toBe(true);
   });

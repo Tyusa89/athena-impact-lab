@@ -234,7 +234,7 @@ function Index() {
         </div>
 
         <Section title="Deterministic vs Meta comparison" tag="disabled unless owner-activated">
-          <MetaPanel scenarioId={scenarioId} workspaces={ws} analysis={a} />
+          <MetaPanel scenarioId={scenarioId} roleId={roleId} workspaces={ws} analysis={a} />
         </Section>
 
         <Section title="Permission leak checks (live, in-browser)" tag={`${tests.filter((t) => t.pass).length}/${tests.length} passing`}>

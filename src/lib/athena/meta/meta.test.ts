@@ -219,3 +219,62 @@ describe("causal wording validator (Test 002 regression)", () => {
     expect((await runMeta(req(FIN), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
 });
+
+describe("Marketing Manager × Scenario A — local role-filter audit (no network)", () => {
+  const MKT = ROLES.find((r) => r.id === "marketing")!.workspaces;
+  const A = SCENARIOS.find((s) => s.id === "baseline")!;
+  const sentPrompt = async (input: unknown) => {
+    const f = mockFetch(good(authorizedRecords(req(MKT))[0]!.id));
+    await runMeta(input, READY, f as never);
+    return f.mock.calls.length ? ((JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).messages[1].content) as string) : null;
+  };
+  it("Marketing Manager role maps to Marketing + Sales workspaces (as defined in data)", () => {
+    expect([...MKT].sort()).toEqual(["ws-marketing", "ws-sales"]);
+  });
+  it("prompt contains every authorized record and no Operations/Finance id or source", async () => {
+    const p = (await sentPrompt(req(MKT)))!;
+    for (const r of A.records) {
+      if (MKT.includes(r.workspace)) expect(p).toContain(r.id);
+      else { expect(p).not.toContain(r.id); expect(p).not.toContain(r.source); }
+    }
+  });
+  it("prompt never includes source names or notes (only id/department/date/metric/period/value/unit)", async () => {
+    const p = (await sentPrompt(req(MKT)))!;
+    for (const r of A.records) { expect(p).not.toContain(r.source); if (r.note) expect(p).not.toContain(r.note); }
+  });
+  it("extra client fields (forged role label) are ignored; only workspaces matter", async () => {
+    const p = (await sentPrompt({ ...req(MKT), role: "exec", records: A.records }))!;
+    const ops = A.records.find((r) => r.workspace === "ws-ops")!;
+    expect(p).not.toContain(ops.id);
+  });
+  it("LIMITATION: a forged workspace list is trusted — client can claim all workspaces", async () => {
+    const p = (await sentPrompt(req(["ws-marketing", "ws-sales", "ws-ops", "ws-finance"])))!;
+    expect(p).toContain(A.records.find((r) => r.workspace === "ws-finance")!.id);
+  });
+  it("unknown, missing or malformed workspace input is blocked with no request", async () => {
+    for (const bad of [{ scenarioId: "baseline", ownerConfirmed: true }, req(["ws-hr"]), req(["WS-MARKETING"]), { ...req(MKT), workspaces: "ws-marketing" }]) {
+      const f = vi.fn();
+      expect((await runMeta(bad, READY, f as never)).state).toBe("blocked");
+      expect(f).not.toHaveBeenCalled();
+    }
+  });
+  it("duplicated workspace entries do not widen access", async () => {
+    const p = (await sentPrompt(req(["ws-marketing", "ws-marketing", "ws-sales"])))!;
+    expect(p).not.toContain(A.records.find((r) => r.workspace === "ws-ops")!.id);
+  });
+  it.each(["ws-ops", "ws-finance"])("response citing or naming a hidden %s record is rejected", async (ws) => {
+    const hidden = A.records.find((r) => r.workspace === ws)!;
+    const ok = authorizedRecords(req(MKT))[0]!.id;
+    const c = good(ok); c.observations[0]!.cited_ids = [hidden.id];
+    const n = good(ok); n.missing_evidence = [`Need ${hidden.id}`];
+    const s = good(ok); s.recommendations[0]!.text = `Check ${hidden.source} data.`;
+    for (const o of [c, n, s]) expect((await runMeta(req(MKT), READY, mockFetch(o) as never)).state).toBe("rejected");
+  });
+  it("valid reply citing only Marketing/Sales records passes", async () => {
+    const ids = authorizedRecords(req(MKT)).map((r) => r.id);
+    const o = good(ids[0]!); o.observations[0]!.cited_ids = ids.slice(0, 6);
+    const r = await runMeta(req(MKT), READY, mockFetch(o) as never);
+    expect(r.state).toBe("ok");
+    if (r.state === "ok") expect(r.authorizedIds.every((id) => MKT.includes(A.records.find((x) => x.id === id)!.workspace))).toBe(true);
+  });
+});

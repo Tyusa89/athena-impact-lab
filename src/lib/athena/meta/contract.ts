@@ -9,7 +9,7 @@
 // accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
 // NOT verified: pricing.
 import { z } from "zod";
-import { SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
+import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
@@ -24,12 +24,24 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 export const SYNTHETIC_SCENARIO_ALLOWLIST: readonly string[] = SCENARIOS.map((s) => s.id);
 const WORKSPACE_IDS = WORKSPACES.map((w) => w.id) as readonly string[];
 
+/** DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION. Server-owned, frozen role → workspace allowlist.
+ * Copied (not referenced) from the UI role list so runtime mutation of ROLES cannot widen it.
+ * Any caller can still CLAIM any listed role: there is no sign-in. */
+export const SERVER_ROLE_WORKSPACES: Readonly<Record<string, readonly string[]>> = Object.freeze(
+  Object.fromEntries(ROLES.map((r) => [r.id, Object.freeze(r.workspaces.filter((w) => WORKSPACE_IDS.includes(w)))])),
+);
+export function workspacesForRole(roleId: string): readonly string[] {
+  if (!Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, roleId)) throw new Error("Unknown role");
+  return SERVER_ROLE_WORKSPACES[roleId]!;
+}
+
 /** Rough, conservative token estimate (~3 chars/token). */
 export const estimateTokens = (s: string) => Math.ceil(s.length / 3);
 
 export const RequestSchema = z.object({
   scenarioId: z.string().refine((id) => SYNTHETIC_SCENARIO_ALLOWLIST.includes(id), "Scenario not in synthetic allowlist"),
-  workspaces: z.array(z.string().refine((w) => WORKSPACE_IDS.includes(w), "Unknown workspace")).max(WORKSPACE_IDS.length),
+  // Only an allowlisted role id is accepted; any client workspaces/records/other fields are stripped by zod.
+  roleId: z.string().refine((r) => Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, r), "Unknown role"),
   ownerConfirmed: z.literal(true),
 });
 export type MetaRequest = z.infer<typeof RequestSchema>;
@@ -68,10 +80,10 @@ export const RESPONSE_FORMAT = {
 } as const;
 
 /** Server-side reconstruction: records come only from bundled synthetic data, filtered BEFORE prompt building. */
-export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "workspaces">): EvidenceRecord[] {
+export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId">): EvidenceRecord[] {
   const s = SCENARIOS.find((x) => x.id === req.scenarioId);
   if (!s) throw new Error("Scenario not in synthetic allowlist");
-  return filterVisible(s.records, req.workspaces);
+  return filterVisible(s.records, workspacesForRole(req.roleId));
 }
 
 export function buildMessages(question: string, records: EvidenceRecord[]) {

@@ -162,8 +162,8 @@ describe("truncation fix — token accounting & compact schema", () => {
     expect(OutputSchema.safeParse(o).success).toBe(true);
     expect(RESPONSE_FORMAT.json_schema.schema.properties.observations.maxItems).toBe(LIMITS.observations);
   });
-  it("Paid-Social Surge × executive: valid compact reply passes; restricted role cannot cite hidden ids", async () => {
-    const s = SCENARIOS.find((x) => /paid/i.test(x.name))!;
+  it("Baseline (paid-social surge) × executive: valid compact reply passes; restricted role cannot cite hidden ids", async () => {
+    const s = SCENARIOS.find((x) => x.id === "baseline")!;
     const allIds = authorizedRecords(req(ALL, s.id)).map((r) => r.id);
     expect((await runMeta(req(ALL, s.id), READY, mockFetch(good(allIds[0]!)) as never)).state).toBe("ok");
     const hidden = s.records.find((r) => r.workspace !== "ws-finance")!.id;

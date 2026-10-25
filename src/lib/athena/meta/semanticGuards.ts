@@ -15,7 +15,7 @@
 //   - Magnitude words are checked only where they describe a metric's performance; "twice a week", "split in half",
 //     "a dozen customers" and "a third option" are ordinary process language.
 //   - Messages never echo model text, record ids, source labels or the names of unauthorized metrics/departments.
-import { goodDirection, metricLabel, type Catalog, type DomainIdOf, type MetricKeyOf } from "../core/catalog";
+import { assertCatalog, goodDirection, metricLabel, type Catalog, type DomainIdOf, type MetricKeyOf } from "../core/catalog";
 import type { EvidenceRecord } from "../data";
 import { PROTOTYPE_CATALOG } from "../prototypeCatalog";
 import { INVISIBLE_CHARS, type VerifiedFact } from "./numericGrounding";
@@ -50,7 +50,7 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ------------------------------------------------------------------ entities (metrics and departments)
 /** The department that owns each metric. Used to tell "not authorized" from "authorized but no data in this scenario". */
-export const departmentByMetric = <C extends Catalog>(c: C) => Object.fromEntries(c.metrics.map((m) => [m.key, m.domain])) as Record<MetricKeyOf<C>, DomainIdOf<C>>;
+export const departmentByMetric = <C extends Catalog>(c: C) => (assertCatalog(c), Object.fromEntries(c.metrics.map((m) => [m.key, m.domain])) as Record<MetricKeyOf<C>, DomainIdOf<C>>);
 /** The prototype's metric → department map (kept for callers and tests that reason about the bundled scenarios). */
 export const METRIC_DEPARTMENT = departmentByMetric(PROTOTYPE_CATALOG);
 
@@ -58,6 +58,7 @@ type Entity = { kind: "metric" | "dept"; key: string; start: number; end: number
 /** Term table built from a catalog's aliases: longest phrase first (stable, so ties keep catalog order), whole-word matching. */
 const termTables = new WeakMap<Catalog, { kind: "metric" | "dept"; key: string; re: RegExp }[]>();
 function termTable(c: Catalog) {
+  assertCatalog(c);
   let t = termTables.get(c);
   if (!t) {
     const list = [
@@ -232,6 +233,7 @@ function isAmbiguous(es: Entity[], h: number, clause: string): boolean {
 
 /** Directional claims in a text, each bound to the metric/department entities it describes. */
 export function directionalClaims(text: string, lane: Lane, catalog: Catalog = PROTOTYPE_CATALOG): Claim[] {
+  assertCatalog(catalog);
   const claims: Claim[] = [];
   const interp = lane === "interpretation";
   for (const c of clausesOf(semanticText(text).replace(APPOSITIVE, " "))) {
@@ -344,6 +346,7 @@ const MOVEMENT_CONTEXT = new RegExp(`\\b(?:${WORD_KEYS.join("|")}|up|down|reduce
  * so "Review revenue twice a week" or "Pull a hundred records" pass while "Reduce backorders by half" does not.
  */
 export function magnitudeExpressions(text: string, lane: Lane = "interpretation", catalog: Catalog = PROTOTYPE_CATALOG): string[] {
+  assertCatalog(catalog);
   const t = semanticText(text);
   const kinds = new Set<string>();
   for (const p of MAGNITUDE_PATTERNS) if (p.ctx === "always" && p.re.test(t)) kinds.add(p.kind);
@@ -366,6 +369,7 @@ export interface SemanticScope {
   catalog: Catalog;
 }
 export function semanticScope(authorized: readonly EvidenceRecord[], facts: readonly VerifiedFact[], catalog: Catalog = PROTOTYPE_CATALOG): SemanticScope {
+  assertCatalog(catalog);
   return { facts, departments: new Set(authorized.map((r) => r.department)), catalog };
 }
 /** `domain`: not authorized. `unavailable`: authorized but no verified data in this scenario. Messages never name unauthorized things or echo model text. */
@@ -373,6 +377,7 @@ export interface SemanticIssue { code: "magnitude" | "direction" | "domain" | "u
 
 /** All semantic-guard issues for one text. Empty when the text passes. `where` is a safe locator such as "interpretation 2". */
 export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, where = "text"): SemanticIssue[] {
+  assertCatalog(scope.catalog); // a hand-built scope is checked too
   const issues: SemanticIssue[] = [];
   const seen = new Set<string>();
   const push = (i: SemanticIssue) => { if (!seen.has(i.message)) { seen.add(i.message); issues.push(i); } };

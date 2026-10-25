@@ -9,6 +9,7 @@
 // accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
 // NOT verified: pricing.
 import { z } from "zod";
+import { assertCatalog } from "../core/catalog";
 import type { AnalysisContext } from "../core/facts";
 import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { PROTOTYPE_CONTEXT, filterVisible } from "../engine";
@@ -162,6 +163,7 @@ function isLegacyShape(json: unknown): boolean {
  * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
  */
 export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): ValidationResult {
+  assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
   if (isLegacyShape(json)) return fail({ code: "legacy", message: LEGACY_MESSAGE });

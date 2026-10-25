@@ -244,6 +244,127 @@ describe("duplicates and conflicts never silently change a fact", () => {
     const r = okResult(runCsv(csv(`id,${HEADER}`, "R-1,revenue,Finance,P1,100,USD", "R-1,revenue,Finance,P2,120,USD"), { spec }));
     expect(reasons(r)).toEqual(["2:id_duplicate/recordId", "3:id_duplicate/recordId"]);
   });
+  describe("duplicate ids account for every row with a syntactically valid id, including rows rejected for unrelated reasons", () => {
+    const spec: MappingSpec = { ...MINI_MAPPING, columns: { ...MINI_MAPPING.columns, recordId: "id" } };
+    const H2 = `id,${HEADER}`;
+    const accept = { options: { mode: "accept_valid" as const } };
+    const run = (...rows: string[]) => okResult(runCsv(csv(H2, ...rows), { spec, ...accept }));
+    const idDup = (r: ReturnType<typeof run>) => r.rejected.filter((x) => x.reasons.some((y) => y.code === "id_duplicate")).map((x) => x.line);
+
+    it("REPRODUCTION: a valid row that shares an id with a row rejected for another field is not accepted", () => {
+      // line 2 has a valid id (R-1) but a bad unit; line 3 is fully valid and reuses R-1; line 4 is an unrelated valid row
+      const r = run("R-1,cost,Finance,P1,5,EUR", "R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+      expect(idDup(r)).toEqual([2, 3]);
+      expect(r.accepted.map((e) => e.id)).toEqual(["R-2"]); // before the fix this was ["R-1", "R-2"]
+      expect(r.provenance["R-1"]).toBeUndefined();
+    });
+    it.each([
+      ["an unknown metric", "R-1,gross margin,Finance,P1,5,USD"], ["a domain mismatch", "R-1,cost,Ops,P1,5,USD"], ["a unit mismatch", "R-1,cost,Finance,P1,5,EUR"],
+      ["a missing unit", "R-1,cost,Finance,P1,5,"], ["an invalid value", "R-1,cost,Finance,P1,abc,USD"], ["a missing value", "R-1,cost,Finance,P1,,USD"],
+      ["an out-of-range value", "R-1,cost,Finance,P1,1000000000001,USD"], ["an unknown period", "R-1,cost,Finance,P9,5,USD"], ["a missing period", "R-1,cost,Finance,,5,USD"],
+      ["a missing metric", "R-1,,Finance,P1,5,USD"], ["a missing domain", "R-1,cost,,P1,5,USD"],
+    ])("a row rejected for %s still reserves its id: the valid row with the same id is rejected too", (_n, bad) => {
+      for (const order of [[bad, "R-1,revenue,Finance,P1,100,USD"], ["R-1,revenue,Finance,P1,100,USD", bad]]) {
+        const r = run(...order, "R-2,revenue,Finance,P2,120,USD");
+        expect(idDup(r), order.join(" | ")).toEqual([2, 3]);
+        expect(r.accepted.map((e) => e.id)).toEqual(["R-2"]);
+      }
+    });
+    it("a row rejected for a bad date, source or note also reserves its id", () => {
+      const sp: MappingSpec = { ...spec, columns: { ...spec.columns, periodEnd: "end", note: "note" } };
+      const text = csv(`id,${HEADER},end,note`, "R-1,revenue,Finance,P1,100,USD,2026-02-30,", "R-1,cost,Finance,P1,5,USD,2026-01-31,", `R-3,revenue,Finance,P2,120,USD,2026-02-28,${"n".repeat(241)}`, "R-3,cost,Finance,P2,6,USD,2026-02-28,");
+      const r = okResult(runCsv(text, { spec: sp, ...accept }));
+      expect(r.rejected.filter((x) => x.reasons.some((y) => y.code === "id_duplicate")).map((x) => x.line)).toEqual([2, 3, 4, 5]);
+      expect(r.accepted).toEqual([]);
+    });
+    it("three or more rows share one id: all are rejected", () => {
+      const r = run("R-1,cost,Finance,P1,5,EUR", "R-1,revenue,Finance,P1,100,USD", "R-1,orders,Ops,P1,9,orders", "R-2,revenue,Finance,P2,120,USD");
+      expect(idDup(r)).toEqual([2, 3, 4]);
+    });
+    it("all-or-nothing is unaffected (the batch was already rejected) and reports the duplicate", () => {
+      const r = okResult(runCsv(csv(H2, "R-1,cost,Finance,P1,5,EUR", "R-1,revenue,Finance,P1,100,USD"), { spec }));
+      expect(r.status).toBe("rejected");
+      expect(r.accepted).toEqual([]);
+      expect(idDup(r as never)).toEqual([2, 3]);
+    });
+    it("a fully valid file with unique ids is untouched", () => {
+      const r = run("R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+      expect(r.status).toBe("accepted");
+      expect(r.accepted.map((e) => e.id)).toEqual(["R-1", "R-2"]);
+    });
+    it("ids that differ only by case are different ids (no folding)", () => {
+      const r = run("R-1,revenue,Finance,P1,100,USD", "r-1,revenue,Finance,P2,120,USD");
+      expect(r.status).toBe("accepted");
+    });
+    it("surrounding spaces are formatting: ' R-1 ' and 'R-1' are the same id", () => {
+      const r = run('" R-1 ",cost,Finance,P1,5,EUR', "R-1,revenue,Finance,P1,100,USD");
+      expect(idDup(r)).toEqual([2, 3]);
+    });
+
+    it("property: over many random files, no id and no (metric, period) that appears on more than one row is ever accepted, and accepted ids are unique", () => {
+      let seed = 1234;
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
+      for (let t = 0; t < 300; t++) {
+        const n = 2 + Math.floor(rnd() * 8);
+        const rows = Array.from({ length: n }, () => {
+          const id = pick(["R-1", "R-2", "R-3", "R-4", "bad id", "R-5"]);
+          const metric = pick(["revenue", "cost", "orders", "nope"]);
+          const dom = metric === "orders" ? "Ops" : "Finance";
+          return { id, metric, line: `${id},${metric},${pick([dom, dom, "Legal"])},${pick(["P1", "P2", "P1", "P9"])},${pick(["10", "20", "x"])},${metric === "orders" ? pick(["orders", "USD"]) : pick(["USD", "USD", "EUR"])}` };
+        });
+        const r = okResult(runCsv(csv(H2, ...rows.map((x) => x.line)), { spec, ...accept }));
+        const ids = r.accepted.map((e) => e.id);
+        expect(new Set(ids).size, rows.map((x) => x.line).join("|")).toBe(ids.length);
+        const idCount = new Map<string, number>(), keyCount = new Map<string, number>();
+        const parsed = rows.map((x) => x.line.split(","));
+        for (const c of parsed) { if (/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(c[0]!)) idCount.set(c[0]!, (idCount.get(c[0]!) ?? 0) + 1); const k = `${c[1]}|${c[3]}`; keyCount.set(k, (keyCount.get(k) ?? 0) + 1); }
+        for (const e of r.accepted) {
+          expect(idCount.get(e.id), `${e.id} accepted but repeated`).toBe(1);
+          expect(keyCount.get(`${e.metric}|${e.period === "prior" ? "P1" : "P2"}`), `${e.metric}/${e.period} accepted but repeated`).toBe(1);
+        }
+      }
+    });
+
+    describe("malformed ids never create duplicate matches", () => {
+      it.each(["bad id", "bad/id", "-leading", "a;b", "R\u20131", "R-1/", "x".repeat(65), "\u00e9"])("two rows with the same malformed id %j get id_invalid only", (id) => {
+        const r = run(`"${id}",revenue,Finance,P1,100,USD`, `"${id}",revenue,Finance,P2,120,USD`);
+        expect(r.rejected.map((x) => x.reasons.map((y) => y.code))).toEqual([["id_invalid"], ["id_invalid"]]);
+        expect(idDup(r)).toEqual([]);
+      });
+      it("a malformed id does not match a valid id it resembles (and does not drag the valid row down)", () => {
+        const r = run("R-1/,cost,Finance,P1,5,USD", "R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => [x.line, x.reasons.map((y) => y.code)])).toEqual([[2, ["id_invalid"]]]);
+        expect(r.accepted.map((e) => e.id)).toEqual(["R-1", "R-2"]);
+      });
+      it("an id with a control character is rejected for that character and never matches", () => {
+        const r = run('"R-\u00071",cost,Finance,P1,5,USD', "R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => [x.line, x.reasons.map((y) => y.code)])).toEqual([[2, ["invalid_character"]]]);
+        expect(idDup(r)).toEqual([]);
+      });
+      it("an empty id is invalid, and two empty ids do not match each other", () => {
+        const r = run(",revenue,Finance,P1,100,USD", ",revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => x.reasons.map((y) => y.code))).toEqual([["id_invalid"], ["id_invalid"]]);
+      });
+      it("a row with the wrong number of cells contributes no id (its cells are misaligned)", () => {
+        const r = run("R-1,revenue,Finance,P1,100", "R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => [x.line, x.reasons.map((y) => y.code)])).toEqual([[2, ["field_count_mismatch"]]]);
+        expect(r.accepted.map((e) => e.id)).toEqual(["R-1", "R-2"]);
+      });
+    });
+
+    describe("the duplicate (metric, period) rules are unchanged", () => {
+      it("identical and conflicting keys are still rejected for every row, valid or not", () => {
+        const r = run("R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P1,100,USD", "R-3,revenue,Finance,P1,105,EUR", "R-4,revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => [x.line, x.reasons.map((y) => y.code).sort()])).toEqual([[2, ["conflicting_record"]], [3, ["conflicting_record"]], [4, ["conflicting_record", "unit_mismatch"]]]);
+        expect(r.accepted.map((e) => e.id)).toEqual(["R-4"]);
+      });
+      it("a row can fail both rules and reports both", () => {
+        const r = run("R-1,revenue,Finance,P1,100,USD", "R-1,revenue,Finance,P1,100,USD", "R-2,revenue,Finance,P2,120,USD");
+        expect(r.rejected.map((x) => x.reasons.map((y) => y.code).sort())).toEqual([["duplicate_record", "id_duplicate"], ["duplicate_record", "id_duplicate"]]);
+      });
+    });
+  });
   it.each(["", " ", "has space", "bad/char", "-leading", "a".repeat(65), "tenant\u0001x", "id;drop"])("record id %j is invalid", (id) => {
     const spec: MappingSpec = { ...MINI_MAPPING, columns: { ...MINI_MAPPING.columns, recordId: "id" } };
     expect(reasons(okResult(runCsv(csv(`id,${HEADER}`, `"${id}",revenue,Finance,P1,100,USD`, "R-2,revenue,Finance,P2,120,USD"), { spec }))).some((x) => x.startsWith("2:") && /id_invalid|invalid_character/.test(x))).toBe(true);

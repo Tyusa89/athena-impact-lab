@@ -20,7 +20,7 @@ source system --SourceAdapter--> RawTable --importSource(MappingSpec, Catalog, T
   (no thousands separators, exponent, sign prefix or NaN; at most 15 digits; |v| <= 1e12); period must be one of the two declared labels; an optional
   end date must be a real ISO date equal to that period's end. Nothing is defaulted, repaired or inferred. Control, bidi and zero-width characters in any used field reject the row.
 * **Duplicates and conflicts**: every row sharing a (metric, period) with another row (identical or not), and every repeated record id, is rejected.
-  A rejected row still blocks a valid row with the same key. No row silently wins.
+  A rejected row still blocks a valid row with the same key, and any row with a syntactically valid id reserves that id even if it is rejected for an unrelated field (malformed ids and rows with the wrong cell count reserve nothing). No row silently wins.
 * **Modes**: `all_or_nothing` (default: any rejected row means no evidence from the batch) or `accept_valid`. Rejections report the line, a field role and a
   closed code, never the cell content. Ingestion writes nothing to the console and calls no network or model.
 * **Ledger** (`ledger.ts`, in-memory reference): commits only results produced by `importSource`, only under their own tenant; refuses a later batch that

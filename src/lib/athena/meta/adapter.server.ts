@@ -1,26 +1,31 @@
-// Server-only Meta adapter. Exactly one request, no retries, hard token budget.
-// Never executes approvals/actions: it only returns validated text.
+// Server-only analysis pipeline. Provider-neutral: it authenticates, authorizes, builds the prompt from authorized evidence only, makes
+// exactly ONE request through a ModelProvider (no retries, engine-owned deadline, hard token budgets) and validates what comes back.
+// Never executes approvals/actions: it only returns validated text. Provider specifics live in ./providers/*.
 import { AuthorizationError, assertAuthorized, authorizeEvidence, type AccessPolicy, type AuthorizedEvidence, type EvidenceStore, type IdentityBoundary } from "../core/access";
 import type { AnalysisContext } from "../core/facts";
 import type { EvidenceRecord } from "../data";
 import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
 import { demoAccessPolicy, demoEvidenceStore, demoIdentity, resolveDemoRequest, type PrototypeEvidence, type ResolvedRequest } from "../prototypeAdapter";
-import {
-  META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REASONING_EFFORT, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
-  estimateTokens, prepareMessages, validateAuthorizedOutput, type MetaOutput,
-} from "./contract";
+import { estimateTokens, prepareMessages, validateAuthorizedOutput, type MetaOutput } from "./contract";
 import type { VerifiedFinding } from "./findings";
+import { MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_MS } from "./limits";
 import { buildVerifiedFacts, uncoveredRecordIds } from "./numericGrounding";
+import { OUTPUT_JSON_SCHEMA } from "./outputSchema";
+import type { ModelOutcome, ModelProvider, ModelRequest, ModelUsage, ProviderEnv } from "./provider";
+import { museSpark } from "./providers/muse";
 
-export interface MetaEnv { META_MODEL_API_KEY?: string | undefined; META_MODEL_ENABLED?: string | undefined }
+/** Environment handed to the configured provider (opaque to the engine). Kept as an alias of the default provider's variables for existing callers. */
+export type { MuseEnv as MetaEnv } from "./providers/muse";
 
 export type MetaStatus = { keyConfigured: boolean; ownerEnabled: boolean; ready: boolean; model: string; maxInputTokens: number; maxOutputTokens: number };
 
-export function metaStatus(env: MetaEnv): MetaStatus {
-  const keyConfigured = !!env.META_MODEL_API_KEY && env.META_MODEL_API_KEY.trim().length > 0;
-  const ownerEnabled = env.META_MODEL_ENABLED === "true";
-  return { keyConfigured, ownerEnabled, ready: keyConfigured && ownerEnabled, model: META_MODEL, maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: MAX_OUTPUT_TOKENS };
+export function metaStatus(env: ProviderEnv, provider: ModelProvider = museSpark): MetaStatus {
+  const { keyConfigured, ownerEnabled } = provider.status(env);
+  return { keyConfigured, ownerEnabled, ready: keyConfigured && ownerEnabled, model: provider.model, maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: MAX_OUTPUT_TOKENS };
 }
+
+// Kept for existing imports; the request format and response parsing now belong to the Muse Spark adapter.
+export { buildBody, readUsage } from "./providers/muse";
 
 export type MetaResult =
   | { state: "blocked"; reason: string; requestSent: false }
@@ -28,24 +33,7 @@ export type MetaResult =
   | { state: "rejected"; errors: string[]; categories?: string[] | undefined; requestSent: true; usage?: Usage | undefined }
   // findings: verified, Athena-rendered on the server from authorized facts (no model text). output: unverified model lanes.
   | { state: "ok"; findings: VerifiedFinding[]; output: MetaOutput; requestSent: true; usage?: Usage | undefined; authorizedIds: string[] };
-export type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; reasoning_tokens?: number; visible_output_tokens?: number; finish_reason?: string; max_tokens_sent: number };
-
-/** Build the outbound body. Exported for tests; the cap is clamped to the hard server constant. */
-export function buildBody(messages: unknown) {
-  return { model: META_MODEL, messages, max_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: REASONING_EFFORT, response_format: RESPONSE_FORMAT, stream: false };
-}
-
-export function readUsage(body: { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } }, finish?: string): Usage {
-  const u = body.usage ?? {};
-  const r = u.completion_tokens_details?.reasoning_tokens;
-  const out: Usage = { max_tokens_sent: MAX_OUTPUT_TOKENS };
-  if (u.prompt_tokens !== undefined) out.prompt_tokens = u.prompt_tokens;
-  if (u.completion_tokens !== undefined) out.completion_tokens = u.completion_tokens;
-  if (u.total_tokens !== undefined) out.total_tokens = u.total_tokens;
-  if (r !== undefined) { out.reasoning_tokens = r; if (u.completion_tokens !== undefined) out.visible_output_tokens = u.completion_tokens - r; }
-  if (finish) out.finish_reason = finish;
-  return out;
-}
+export type Usage = ModelUsage;
 
 /** Facts-only prompting is allowed only when every authorized record is represented by a verified fact. Otherwise nothing is sent. */
 export function factsBlockReason(records: readonly EvidenceRecord[]): string | null {
@@ -76,13 +64,26 @@ export interface EngineRuntime {
   policy: AccessPolicy<PrototypeEvidence>;
   analysis: AnalysisContext;
   question: string;
+  /** The model provider. Replaceable: the pipeline sees only the neutral `ModelProvider` contract. */
+  provider: ModelProvider;
 }
-export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, identity: demoIdentity, allowSimulatedIdentity: true, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION };
+export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, identity: demoIdentity, allowSimulatedIdentity: true, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION, provider: museSpark };
 
-export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch, runtime: EngineRuntime = PROTOTYPE_RUNTIME): Promise<MetaResult> {
-  const st = metaStatus(env);
-  if (!st.keyConfigured) return { state: "blocked", reason: "META_MODEL_API_KEY is not configured on the server.", requestSent: false };
-  if (!st.ownerEnabled) return { state: "blocked", reason: "Owner activation flag META_MODEL_ENABLED is not 'true'.", requestSent: false };
+const num = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0;
+/** Copy only the known, well-formed accounting fields from a provider's usage; the sent cap is the engine's, not the provider's claim. */
+function cleanUsage(u: unknown): ModelUsage {
+  const src = (typeof u === "object" && u !== null ? u : {}) as Record<string, unknown>;
+  const out: ModelUsage = { max_tokens_sent: MAX_OUTPUT_TOKENS };
+  for (const k of ["prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens", "visible_output_tokens"] as const) if (num(src[k])) out[k] = src[k] as number;
+  if (typeof src["finish_reason"] === "string" && src["finish_reason"].length <= 64) out.finish_reason = src["finish_reason"];
+  return out;
+}
+const deepFreeze = <T>(x: T): T => { if (typeof x === "object" && x !== null && !Object.isFrozen(x)) { Object.freeze(x); for (const v of Object.values(x)) deepFreeze(v); } return x; };
+
+export async function runMeta(input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: EngineRuntime = PROTOTYPE_RUNTIME): Promise<MetaResult> {
+  const provider = runtime.provider;
+  const notReady = provider.blockedReason(env); // missing credential or owner activation off: nothing else runs
+  if (notReady) return { state: "blocked", reason: notReady, requestSent: false };
   const req = runtime.resolve(input);
   if (!req.ok) return { state: "blocked", reason: req.reason, requestSent: false };
 
@@ -103,48 +104,36 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
   const est = estimateTokens(JSON.stringify(messages));
   if (est > MAX_INPUT_TOKENS) return { state: "blocked", reason: `Estimated input ${est} tokens exceeds budget ${MAX_INPUT_TOKENS}.`, requestSent: false };
 
-  // One deadline covers the request AND the full response body. It is enforced here (not only via the abort signal) so a
-  // stalled body or a fetch that ignores the signal still ends at REQUEST_TIMEOUT_MS. Exactly one attempt; never retried.
+  // One deadline covers the whole provider call (request and full response). It is enforced HERE, not only via the abort signal, so a
+  // provider that stalls or ignores the signal still ends at REQUEST_TIMEOUT_MS. Exactly one call; never retried, whatever it returns.
+  // The provider gets only the finished messages (built from authorized evidence), the output cap and the schema. Nothing else.
+  const request: ModelRequest = deepFreeze({ messages: messages.map((m) => ({ role: m.role, content: m.content })), maxOutputTokens: MAX_OUTPUT_TOKENS, responseSchema: OUTPUT_JSON_SCHEMA });
   const ctrl = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => { ctrl.abort(); reject(new Error("deadline")); }, REQUEST_TIMEOUT_MS);
   });
   deadline.catch(() => {}); // already handled here; still raceable below
-  let res: Response | undefined;
-  let raw = "";
+  let outcome: ModelOutcome;
   try {
-    res = await Promise.race([
-      fetchImpl(META_ENDPOINT, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${env.META_MODEL_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(messages)),
-        signal: ctrl.signal,
-      }),
-      deadline,
-    ]);
-    if (res.ok) raw = await Promise.race([res.text(), deadline]);
+    outcome = await Promise.race([provider.complete(request, { env, fetch: fetchImpl, signal: ctrl.signal }), deadline]);
   } catch (e) {
-    void res?.body?.cancel().catch(() => {});
     const timedOut = ctrl.signal.aborted;
-    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Network error (not retried): ${e instanceof Error ? e.name : "unknown"}`, requestSent: true };
+    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Provider error (not retried): ${e instanceof Error ? e.name : "unknown"}`, requestSent: true };
   } finally { clearTimeout(timer); }
 
-  if (!res.ok) {
-    console.error("Meta API error status", res.status);
-    return { state: "error", reason: `Meta API returned HTTP ${res.status} (not retried).`, requestSent: true };
-  }
-  let body: { choices?: { message?: { content?: unknown }; finish_reason?: string }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
-  try { body = JSON.parse(raw); } catch { return { state: "error", reason: "Response body is not JSON.", requestSent: true }; }
-  const choice = body.choices?.[0];
-  const usage = readUsage(body, choice?.finish_reason);
+  // Nothing a provider returns is trusted: only well-formed text, token counts and a truncation flag are read; the rest is ignored.
+  if (typeof outcome !== "object" || outcome === null) return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
+  if (outcome.kind === "failure") return { state: "error", reason: typeof outcome.reason === "string" ? outcome.reason.slice(0, 300) : "Provider request failed (not retried).", requestSent: true };
+  if (outcome.kind !== "completion") return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
+  const usage = cleanUsage(outcome.usage);
   // Redacted diagnostic log: token accounting only, never key, prompt or content.
   console.info("Meta usage", JSON.stringify(usage));
   if ((usage.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage };
-  if (choice?.finish_reason === "length") return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
-  if (typeof choice?.message?.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
+  if (outcome.truncated === true) return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
+  if (typeof outcome.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
 
-  const v = validateAuthorizedOutput(choice.message.content, records, withheld, runtime.analysis);
+  const v = validateAuthorizedOutput(outcome.content, records, withheld, runtime.analysis);
   if (!v.ok) {
     console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
     return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };

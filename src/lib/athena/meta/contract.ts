@@ -1,13 +1,6 @@
-// Meta Model API contract for the Athena prototype. Pure + client-safe (no secrets, no I/O).
-// Verified from dev.meta.ai docs (Oct 2026): OpenAI-compatible Chat Completions at
-// POST https://api.meta.ai/v1/chat/completions, Bearer auth, model "muse-spark-1.3",
-// structured output via response_format { type: "json_schema", json_schema: { name, schema } },
-// response.choices[0].message.content, choices[0].finish_reason ("length" = hit token cap),
-// response.usage token counts (reasoning tokens count as output).
-// Verified (dev.meta.ai/docs/reasoning): `max_tokens` is the Chat Completions output cap; reasoning tokens count
-// toward it and are billed as output (usage.completion_tokens_details.reasoning_tokens). `reasoning_effort`
-// accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
-// NOT verified: pricing.
+// Three-lane output contract and prompt/validation pipeline for the Athena prototype. Pure + client-safe (no secrets, no I/O).
+// Provider-specific details (endpoint, request format, activation variables, response parsing) live in ./providers/*; this module is
+// provider-neutral and only re-exports the Muse Spark constants below for existing imports.
 import { z } from "zod";
 import { assertCatalog } from "../core/catalog";
 import type { AnalysisContext } from "../core/facts";
@@ -16,17 +9,16 @@ import type { EvidenceRecord } from "../data";
 import { PROTOTYPE_CONTEXT } from "../engine";
 import { authorizeDemo, type MetaRequest, type PrototypeEvidence } from "../prototypeAdapter";
 import { renderFindings, type VerifiedFinding } from "./findings";
+import { LIMITS } from "./limits";
 import { checkSemantics, semanticScope } from "./semanticGuards";
 import { INVISIBLE_CHARS, buildAuthorizedFacts, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
 
-export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
-export const META_MODEL = "muse-spark-1.3";
-export const MAX_INPUT_TOKENS = 3000;
-/** Hard server cap sent as max_tokens. Includes hidden reasoning tokens. */
-export const MAX_OUTPUT_TOKENS = 2000;
-export const REASONING_EFFORT = "minimal" as const;
-export const LIMITS = { interpretations: 3, missing: 4, recommendations: 3, text: 200, refs: 4 } as const;
-export const REQUEST_TIMEOUT_MS = 30_000;
+// Engine limits (provider-neutral) live in ./limits; re-exported so existing imports keep working.
+export { LIMITS, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_MS } from "./limits";
+// COMPATIBILITY re-exports of the default provider's constants (the UI shows the model name; tests pin the request format). New code
+// should import them from ./providers/muse. Nothing in this module uses them.
+export { META_ENDPOINT, META_MODEL, REASONING_EFFORT, RESPONSE_FORMAT } from "./providers/muse";
+export { OUTPUT_JSON_SCHEMA } from "./outputSchema";
 // The demo's allowlist, roles, workspaces and request shape live in the prototype adapter; re-exported here for existing imports.
 export { SERVER_ROLE_WORKSPACES, SYNTHETIC_SCENARIO_ALLOWLIST, workspacesForRole, RequestSchema, type MetaRequest } from "../prototypeAdapter";
 
@@ -53,26 +45,6 @@ export type MetaOutput = {
   missing_evidence: string[];
   recommendations: { text: string; requires_human_approval: true; refs: string[]; supporting_ids: string[] }[];
 };
-
-const T = { type: "string", maxLength: LIMITS.text } as const;
-const R = { type: "array", minItems: 1, maxItems: LIMITS.refs, items: { type: "string" } } as const;
-/** JSON schema sent as response_format (mirrors OutputSchema). */
-export const RESPONSE_FORMAT = {
-  type: "json_schema",
-  json_schema: {
-    name: "AthenaAnalysisV2",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["interpretations", "missing_evidence", "recommendations"],
-      properties: {
-        interpretations: { type: "array", maxItems: LIMITS.interpretations, items: { type: "object", additionalProperties: false, required: ["text", "verified", "refs"], properties: { text: T, verified: { type: "boolean", enum: [false] }, refs: R } } },
-        missing_evidence: { type: "array", maxItems: LIMITS.missing, items: T },
-        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "refs"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, refs: R } } },
-      },
-    },
-  },
-} as const;
 
 /** Server-side reconstruction: records come only from the server's own evidence store, authorized for a trusted context BEFORE prompt building. */
 export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId">): AuthorizedEvidence<PrototypeEvidence> {

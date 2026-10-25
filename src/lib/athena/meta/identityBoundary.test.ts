@@ -4,6 +4,7 @@ import { createIdentityBoundary, type IdentityVerifier, type VerifiedIdentity } 
 import { DEMO_TENANT_ID, METRIC_LABELS, ROLES, SCENARIOS, build } from "../data";
 import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
 import { authorizeDemo, demoAccessPolicy, demoActorId, demoEvidenceStore, demoIdentity, resolveDemoRequest, simulatedDemoVerifier, type PrototypeEvidence } from "../prototypeAdapter";
+import { museSpark } from "./providers/muse";
 import { PROTOTYPE_RUNTIME, runMeta, type EngineRuntime } from "./adapter.server";
 
 // PR B-2: the identity boundary. No network: fetch is always a local fake. The "identity provider" is a stand-in verifier.
@@ -34,6 +35,7 @@ const runtimeFor = (token: unknown, over: Partial<EngineRuntime> = {}): EngineRu
   policy: grantAll,
   analysis: PROTOTYPE_CONTEXT,
   question: DEMO_QUESTION,
+  provider: museSpark,
   ...over,
 });
 

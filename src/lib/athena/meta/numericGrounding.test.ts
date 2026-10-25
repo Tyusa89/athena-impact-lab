@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ROLES, SCENARIOS, type EvidenceRecord } from "../data";
 import { runMeta } from "./adapter.server";
 import { LIMITS, MAX_INPUT_TOKENS, RESPONSE_FORMAT, authorizedRecords, buildMessages, estimateTokens, validateOutput } from "./contract";
-import { buildVerifiedFacts, numericTokens, type Claim } from "./numericGrounding";
+import { buildVerifiedFacts, nonAsciiNumerics, numericTokens, type Claim } from "./numericGrounding";
 
 // No network: fetch is always a local fake.
 const READY = { META_MODEL_API_KEY: "test-key", META_MODEL_ENABLED: "true" };
@@ -289,5 +289,80 @@ describe("contract and budget safeguards preserved", () => {
 describe("numericTokens", () => {
   it("ignores record ids, quarter labels and years; strips thousands separators; ignores sign", () => {
     expect(numericTokens("VH-FIN-001-Q3 in Q3 2026: $1,018,000 and -17.9%", ["VH-FIN-001-Q3"])).toEqual([1018000, 17.9]);
+  });
+});
+
+// Unicode numeric bypass regression (found by the offline evaluation). Escapes are used so the characters survive editors.
+const FULLWIDTH_40 = "\uFF14\uFF10"; // ４０
+const ARABIC_INDIC_40 = "\u0664\u0660"; // ٤٠
+const VULGAR_HALF = "\u00BD"; // ½
+describe("Unicode numeric expressions cannot bypass the structured-claim requirement", () => {
+  const ids = () => [rev().prior.id, rev().current.id];
+  it("full-width digits are folded by NFKC and then treated as an unbacked number", async () => {
+    expect(await errorsOf(output(`Revenue fell ${FULLWIDTH_40}%.`, ids(), []))).toContain("Unsupported number 40");
+  });
+  it("Arabic-Indic digits are rejected outright", async () => {
+    expect(await errorsOf(output(`Revenue fell ${ARABIC_INDIC_40}%.`, ids(), []))).toContain("Non-ASCII numeric character");
+  });
+  it("Unicode fractions are folded and rejected as unbacked numbers", async () => {
+    expect(await errorsOf(output(`Revenue fell by ${VULGAR_HALF}.`, ids(), []))).toContain("Unsupported number");
+  });
+  it.each([
+    ["Devanagari digits", "\u096A\u0966"],
+    ["Bengali digits", "\u09EA\u09E6"],
+    ["Thai digits", "\u0E54\u0E50"],
+    ["math bold digits", "\u{1D7D2}\u{1D7CE}"],
+    ["circled digit", "\u2463"],
+    ["superscript digits", "\u2074\u2070"],
+    ["vulgar fraction three quarters", "\u00BE"],
+  ])("%s are rejected", async (_n, digits) => {
+    expect((await run(output(`Revenue fell ${digits}%.`, ids(), []))).state).toBe("rejected");
+  });
+  it("a non-ASCII numeral is rejected even when its value equals a claim's value (fail closed, no interpretation)", async () => {
+    const arabic179 = "\u0661\u0667\u066B\u0669"; // ١٧٫٩
+    expect(await errorsOf(output(`Revenue fell ${arabic179}%.`, ids(), [revPct()]))).toContain("Non-ASCII numeric character");
+  });
+  it("an extra non-ASCII numeral next to a legitimately backed ASCII number is rejected", async () => {
+    expect((await run(output(`Revenue fell 17.9% (${ARABIC_INDIC_40}).`, ids(), [revPct()]))).state).toBe("rejected");
+  });
+  it("a zero-width character cannot split or hide a full-width number", async () => {
+    expect((await run(output("Revenue fell \uFF14\u200B\uFF10%.", ids(), []))).state).toBe("rejected");
+  });
+  it("applies to every text field: hypotheses, recommendations and missing_evidence", async () => {
+    const base = output("Revenue declined.", ids(), []);
+    const hyp = { ...base, observations: [], hypotheses: [{ text: `Demand fell ${ARABIC_INDIC_40}%.`, verified: false, cited_ids: ids(), claims: [] }] };
+    const recm = { ...base, observations: [], recommendations: [{ text: `Cut ${ARABIC_INDIC_40}% of spend.`, requires_human_approval: true, cited_ids: ids(), claims: [] }] };
+    const miss2 = { ...base, missing_evidence: [`Need ${ARABIC_INDIC_40} records.`] };
+    for (const o of [hyp, recm, miss2]) expect((await run(o)).state).toBe("rejected");
+  });
+  it("a full-width spelling of a claim-backed number is NFKC-equivalent to the ASCII number and is accepted", async () => {
+    const fw = "\uFF11\uFF17\uFF0E\uFF19"; // １７．９
+    expect((await run(output(`Revenue fell ${fw}%.`, ids(), [revPct()]))).state).toBe("ok");
+  });
+});
+
+describe("existing valid ASCII claims and intentional exemptions are unchanged", () => {
+  const ids = () => [rev().prior.id, rev().current.id];
+  it("valid ASCII level and change claims still pass", async () => {
+    expect((await run(output("Revenue was $1,018,000 in Q3 2026.", [rev().current.id], [revLevel()]))).state).toBe("ok");
+    expect((await run(output("Revenue fell 17.9%.", ids(), [revPct()]))).state).toBe("ok");
+  });
+  it("record ids, quarter labels and years remain exempt", async () => {
+    expect((await run(output(`Between Q2 and Q3 2026 (${rev().prior.id}, ${rev().current.id}) revenue declined.`, ids(), []))).state).toBe("ok");
+  });
+  it("full-width quarter and year labels are folded and remain exempt", async () => {
+    expect((await run(output("Revenue declined in \uFF31\uFF13 \uFF12\uFF10\uFF12\uFF16.", ids(), []))).state).toBe("ok");
+  });
+  it("a non-ASCII digit in a quarter label is NOT exempt", async () => {
+    expect((await run(output("Revenue declined in Q\u0663.", ids(), []))).state).toBe("rejected");
+  });
+  it("the strict duration rule is unchanged (ASCII and full-width)", async () => {
+    expect(await errorsOf({ ...output("x.", ids(), []), observations: [], recommendations: [{ text: "Run a 2-week test.", requires_human_approval: true, cited_ids: ids(), claims: [] }] })).toContain("Unsupported number 2");
+    expect(await errorsOf({ ...output("x.", ids(), []), observations: [], recommendations: [{ text: "Run a \uFF12-week test.", requires_human_approval: true, cited_ids: ids(), claims: [] }] })).toContain("Unsupported number 2");
+  });
+  it("nonAsciiNumerics ignores ASCII, ids and exempt labels and lists leftover non-ASCII numerals", () => {
+    expect(nonAsciiNumerics("17.9% in Q3 2026, VH-FIN-001-Q3", ["VH-FIN-001-Q3"])).toEqual([]);
+    expect(nonAsciiNumerics(`fell ${ARABIC_INDIC_40}%`, [])).toEqual(["\u0664", "\u0660"]);
+    expect(numericTokens(`fell ${FULLWIDTH_40}% and ${VULGAR_HALF}`, [])).toEqual([40, 1, 2]);
   });
 });

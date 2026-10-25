@@ -3,6 +3,7 @@
 // records only. The model refers to a fact by id in a structured claim; the claim is checked against that exact
 // fact (metric, period, kind, value, unit, direction) and the item must cite the fact's supporting record IDs.
 // Numbers in free text must be backed by one of the item's claims. Anything unverifiable is rejected.
+// Text is NFKC-normalized before scanning; numeric characters that stay non-ASCII are rejected outright.
 import { z } from "zod";
 import { METRIC_LABELS, type EvidenceRecord, type MetricKey } from "../data";
 import { computeFacts } from "../engine";
@@ -87,12 +88,23 @@ export function verifyClaim(c: Claim, facts: VerifiedFact[], citedIds: readonly 
   return errs;
 }
 
-/** Numeric tokens in free text, after removing record ids, quarter labels and years. Commas and sign are ignored. */
-export function numericTokens(text: string, recordIds: readonly string[]): number[] {
-  let t = text;
+/** NFKC-normalize (folds full-width digits, circled digits, vulgar fractions to ASCII) and drop invisible characters, then
+ * remove the intentionally exempt tokens: record ids, quarter labels and years. */
+function scannable(text: string, recordIds: readonly string[]): string {
+  let t = text.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "");
   for (const id of recordIds) t = t.split(id).join(" ");
-  t = t.replace(/\bq[1-4]\b/gi, " ").replace(/\b20\d{2}\b/g, " ");
-  return (t.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((m) => Number(m.replace(/,/g, "")));
+  return t.replace(/\bq[1-4]\b/gi, " ").replace(/\b20\d{2}\b/g, " ");
+}
+
+/** ASCII numeric tokens in free text after normalization and exemptions. Commas and sign are ignored. */
+export function numericTokens(text: string, recordIds: readonly string[]): number[] {
+  return (scannable(text, recordIds).match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((m) => Number(m.replace(/,/g, "")));
+}
+
+/** Numeric characters (\p{N}) that remain non-ASCII after NFKC, e.g. Arabic-Indic or Devanagari digits. Their value is not
+ * interpreted: any such character in free text is rejected (fail closed). */
+export function nonAsciiNumerics(text: string, recordIds: readonly string[]): string[] {
+  return (scannable(text, recordIds).match(/\p{N}/gu) ?? []).filter((ch) => !/^[0-9]$/.test(ch));
 }
 
 export interface GroundedItem { text: string; cited_ids?: readonly string[]; claims?: readonly Claim[] }
@@ -102,6 +114,8 @@ export function verifyItem(item: GroundedItem, facts: VerifiedFact[], recordIds:
   const claims = item.claims ?? [];
   const errs = claims.flatMap((c) => verifyClaim(c, facts, item.cited_ids ?? []));
   const backed = claims.map((c) => Math.abs(c.value));
+  const odd = nonAsciiNumerics(item.text, recordIds);
+  if (odd.length) errs.push(`Non-ASCII numeric character(s) ${odd.slice(0, 3).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(",")} in text "${item.text.slice(0, 40)}": rejected`);
   for (const n of numericTokens(item.text, recordIds)) {
     if (!backed.some((v) => same(v, n))) errs.push(`Unsupported number ${n} in text "${item.text.slice(0, 40)}": no matching verified claim`);
   }

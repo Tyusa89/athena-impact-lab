@@ -1,23 +1,15 @@
 // Deterministic rule-based analysis grounded strictly in visible synthetic records.
 // SECURITY NOTE: this is a client-side SIMULATION of role filtering. It is not
 // authorization. A real system must enforce access on the server.
-import { METRIC_LABELS, PERIODS, type Department, type EvidenceRecord, type MetricKey } from "./data";
+import { computeFacts as coreComputeFacts, describeChange, type AnalysisContext, type CoreFact } from "./core/facts";
+import { PERIODS, type Department, type EvidenceRecord, type MetricKey } from "./data";
+import { PROTOTYPE_CATALOG } from "./prototypeCatalog";
 
-export interface Fact {
-  metric: MetricKey;
-  label: string;
-  department: Department;
-  prior: number;
-  current: number;
-  unit: string;
-  /** Relative change vs prior period: (current - prior) / prior * 100. null if prior is 0. */
-  changePct: number | null;
-  /** For rate metrics (unit "%"): absolute change in percentage points. */
-  changePp: number | null;
-  direction: "up" | "down" | "flat";
-  evidenceIds: string[];
-  periodLabel: string;
-}
+/** The prototype's business domain and reporting window. The reusable calculation lives in ./core; this is the wiring. */
+export const PROTOTYPE_CONTEXT: AnalysisContext = { catalog: PROTOTYPE_CATALOG, periods: PERIODS };
+
+export type Fact = CoreFact<MetricKey, Department>;
+export { describeChange };
 
 export interface Signal {
   key: string;
@@ -58,9 +50,7 @@ export interface Analysis {
 }
 
 export const DEMO_QUESTION = "Why are sales declining while marketing leads are rising?";
-export const FLAT_THRESHOLD_PCT = 3;
-
-const r1 = (n: number) => Math.round(n * 10) / 10;
+export const FLAT_THRESHOLD_PCT = PROTOTYPE_CATALOG.flatThresholdPct;
 
 export function filterVisible(records: EvidenceRecord[], workspaces: readonly string[]) {
   const set = new Set(workspaces);
@@ -68,27 +58,7 @@ export function filterVisible(records: EvidenceRecord[], workspaces: readonly st
 }
 
 export function computeFacts(records: EvidenceRecord[]): Fact[] {
-  const keys = Array.from(new Set(records.map((r) => r.metric)));
-  const facts: Fact[] = [];
-  for (const m of keys) {
-    const ps = records.filter((r) => r.metric === m && r.period === "prior");
-    const cs = records.filter((r) => r.metric === m && r.period === "current");
-    if (ps.length !== 1 || cs.length !== 1) continue; // require exactly one pair; ambiguity → no fact
-    const p = ps[0]!, c = cs[0]!;
-    if (p.unit !== c.unit || p.department !== c.department) continue;
-    const changePct = p.value === 0 ? null : r1(((c.value - p.value) / p.value) * 100);
-    const changePp = c.unit === "%" ? r1(c.value - p.value) : null;
-    const direction = changePct === null || Math.abs(changePct) < FLAT_THRESHOLD_PCT ? "flat" : changePct > 0 ? "up" : "down";
-    facts.push({ metric: m, label: METRIC_LABELS[m], department: c.department, prior: p.value, current: c.value, unit: c.unit, changePct, changePp, direction, evidenceIds: [p.id, c.id], periodLabel: `${PERIODS.prior.label} → ${PERIODS.current.label}` });
-  }
-  return facts;
-}
-
-export function describeChange(f: Fact): string {
-  const fmt = (v: number) => (f.unit === "USD" ? `$${v.toLocaleString("en-US")}` : f.unit === "%" ? `${v}%` : `${v.toLocaleString("en-US")} ${f.unit}`);
-  const rel = f.changePct === null ? "n/a" : `${f.changePct > 0 ? "+" : ""}${f.changePct}%`;
-  const pp = f.changePp !== null ? `, ${f.changePp > 0 ? "+" : ""}${f.changePp} pp` : "";
-  return `${fmt(f.prior)} → ${fmt(f.current)} (${rel} relative${pp})`;
+  return coreComputeFacts(records, PROTOTYPE_CONTEXT);
 }
 
 function signal(key: string, title: string, f: Fact | undefined, want: Fact["direction"]): Signal {

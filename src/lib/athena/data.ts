@@ -1,5 +1,9 @@
 // SYNTHETIC DATA ONLY. Fictional company. Not connected to EcoNest systems.
-export type Department = "Sales" | "Marketing" | "Finance" | "Operations";
+import type { DomainIdOf, MetricKeyOf } from "./core/catalog";
+import { PROTOTYPE_CATALOG } from "./prototypeCatalog";
+
+/** Identifiers come from the prototype catalog (./prototypeCatalog); the unions below are derived from it, not declared here. */
+export type Department = DomainIdOf<typeof PROTOTYPE_CATALOG>;
 
 export interface EvidenceRecord {
   id: string;
@@ -24,16 +28,7 @@ export type MetricKey =
   | "revenue"
   | "cac";
 
-export const METRIC_LABELS: Record<MetricKey, string> = {
-  leads: "Marketing leads",
-  mql_rate: "Lead quality (MQL rate)",
-  conversion_rate: "Sales conversion rate",
-  closed_deals: "Closed deals",
-  fulfillment_days: "Avg. fulfillment time",
-  backorder_rate: "Backorder rate",
-  revenue: "Recognized revenue",
-  cac: "Customer acquisition cost",
-};
+export const METRIC_LABELS = Object.fromEntries(PROTOTYPE_CATALOG.metrics.map((m) => [m.key, m.label])) as Record<MetricKey, string>;
 
 export const COMPANY = {
   name: "Verdant Hollow Home Goods",

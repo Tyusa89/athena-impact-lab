@@ -9,8 +9,9 @@
 // accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
 // NOT verified: pricing.
 import { z } from "zod";
-import { PERIODS, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
-import { filterVisible } from "../engine";
+import type { AnalysisContext } from "../core/facts";
+import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
+import { PROTOTYPE_CONTEXT, filterVisible } from "../engine";
 import { renderFindings, type VerifiedFinding } from "./findings";
 import { checkSemantics, semanticScope } from "./semanticGuards";
 import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
@@ -99,7 +100,7 @@ export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId"
 
 /** Facts-only prompt: every authorized record is represented by exactly one verified fact (enforced by the adapter), so raw
  * records add no evidence. Facts carry the record ids, values, units, department and direction; the two period dates are constant. */
-export function buildMessages(question: string, records: EvidenceRecord[]) {
+export function buildMessages(question: string, records: EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) {
   const system =
     "You analyse SYNTHETIC business facts for a fictional company. Use ONLY VERIFIED_FACTS, which the server computed. " +
     "Refer to facts only by fact_id in refs. NEVER write any digit or number in any text: Athena displays every number itself, " +
@@ -110,7 +111,7 @@ export function buildMessages(question: string, records: EvidenceRecord[]) {
     "BE TERSE: at most " + `${LIMITS.interpretations} interpretations, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
   return [
     { role: "system" as const, content: system },
-    { role: "user" as const, content: `Question: ${question}\nPERIODS (JSON): ${JSON.stringify({ prior: PERIODS.prior, current: PERIODS.current })}\nVERIFIED_FACTS (JSON): ${JSON.stringify(buildVerifiedFacts(records))}` },
+    { role: "user" as const, content: `Question: ${question}\nPERIODS (JSON): ${JSON.stringify({ prior: ctx.periods.prior, current: ctx.periods.current })}\nVERIFIED_FACTS (JSON): ${JSON.stringify(buildVerifiedFacts(records, ctx))}` },
   ];
 }
 
@@ -160,7 +161,7 @@ function isLegacyShape(json: unknown): boolean {
  * Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy and semantic guards.
  * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
  */
-export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[]): ValidationResult {
+export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): ValidationResult {
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
   if (isLegacyShape(json)) return fail({ code: "legacy", message: LEGACY_MESSAGE });
@@ -168,7 +169,7 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   // Paths come from the schema itself. The unrecognized-key message is replaced because it would echo model-supplied key names (which could be unauthorized identifiers).
   if (!parsed.success) return fail(...parsed.error.issues.map((i) => ({ code: "schema", message: `Schema: ${i.path.join(".") || "(root)"} ${i.code === "unrecognized_keys" ? `contains ${i.keys.length} unrecognized key(s)` : i.message}` })));
   const out = parsed.data;
-  const facts = buildVerifiedFacts(authorized);
+  const facts = buildVerifiedFacts(authorized, ctx);
   const known = new Set(facts.map((f) => f.fact_id));
   const hidden = allRecords.filter((r) => !authorized.some((a) => a.id === r.id));
   const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
@@ -185,15 +186,15 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   ];
   for (const l of lanes) if (hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
   const recordIds = allRecords.map((r) => r.id);
-  for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds)) issues.push({ code: "numeral", message });
+  for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds, ctx.periods)) issues.push({ code: "numeral", message });
   // Semantic guards: directional contradictions, magnitude expressions, unauthorized or unavailable domains. Reject, never rewrite.
-  const scope = semanticScope(authorized, facts);
+  const scope = semanticScope(authorized, facts, ctx.catalog);
   for (const l of lanes) for (const i of checkSemantics(l.text, l.lane, scope, l.where)) issues.push({ code: i.code, message: i.message });
   if (issues.length) return fail(...issues);
   const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
   return {
     ok: true,
     output: { interpretations: out.interpretations.map(enrich), missing_evidence: out.missing_evidence, recommendations: out.recommendations.map(enrich) },
-    findings: renderFindings(authorized),
+    findings: renderFindings(authorized, ctx),
   };
 }

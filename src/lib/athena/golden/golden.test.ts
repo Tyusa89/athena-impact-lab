@@ -87,7 +87,7 @@ describe("golden snapshots (all scenario/role combinations)", () => {
   });
   it("matches the captured golden file exactly", () => {
     const now = JSON.parse(JSON.stringify(capture()));
-    if (process.env.UPDATE_GOLDEN === "1") { writeFileSync(FILE, JSON.stringify(now, null, 1) + "\n"); return; }
+    if (process.env["UPDATE_GOLDEN"] === "1") { writeFileSync(FILE, JSON.stringify(now, null, 1) + "\n"); return; }
     expect(existsSync(FILE)).toBe(true);
     expect(now).toEqual(JSON.parse(readFileSync(FILE, "utf8")));
   });

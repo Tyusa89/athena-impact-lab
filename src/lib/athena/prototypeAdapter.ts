@@ -1,11 +1,14 @@
-// The prototype's adapter onto the reusable evidence and authorization interfaces (./core). Everything specific to the demo lives
-// here: the fictional tenant, the demo roles and workspaces, the bundled scenarios, and how a request becomes a trusted context.
+// The prototype's adapter onto the reusable evidence, identity and authorization interfaces (./core). Everything specific to the demo lives
+// here: the fictional tenant, the demo roles and workspaces, the bundled scenarios, and the demo's identity "verifier".
 //
-// DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION. There is no sign-in: any caller can CLAIM any listed demo role, and
-// `resolveDemoRequest` accepts that claim. A real deployment replaces this adapter with one whose resolver verifies a credential
-// before it issues a trusted context. Nothing in ./core knows about roles, workspaces, scenarios or this file.
+// SIMULATION, NOT AUTHENTICATION. The demo has no sign-in. Its identity verifier accepts whichever role the caller CLAIMS and labels the
+// result `assurance: "simulated"`; any caller can therefore claim any listed role. That is the demo's role picker, shown as such in the UI.
+// The tenant is never taken from the request. A real deployment replaces this file's verifier with one that validates a credential (and
+// builds its boundary with `assurance: "verified"`), and sets `allowSimulatedIdentity: false` on its runtime so a simulated context is refused.
+// Nothing in ./core knows about roles, workspaces, scenarios or this file.
 import { z } from "zod";
-import { authorizeEvidence, issueTrustedContext, type AccessPolicy, type AuthorizationResult, type EvidenceScope, type EvidenceStore, type TrustedContext } from "./core/access";
+import { authorizeEvidence, type AccessPolicy, type AuthorizationResult, type EvidenceScope, type EvidenceStore, type TrustedContext } from "./core/access";
+import { createIdentityBoundary, type IdentityVerifier } from "./core/identity";
 import type { Evidence } from "./core/evidence";
 import { DEMO_TENANT_ID, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "./data";
 
@@ -59,18 +62,36 @@ export const RequestSchema = z.object({
 });
 export type MetaRequest = z.infer<typeof RequestSchema>;
 
-export type ResolvedRequest = { ok: true; ctx: TrustedContext; dataset: string } | { ok: false; reason: string };
-/** Demo identity layer: turns an (unverified) request into a trusted context. The tenant is fixed by the server, never read from the request. */
+/** An UNVERIFIED claim made by the caller. It is data for the verifier to judge, never an authenticated fact. */
+export interface DemoRoleClaim { readonly kind: "simulated-demo-role-claim"; readonly roleId: string }
+
+/** The demo's identity adapter. SIMULATION: it accepts any allowlisted role the caller claims; the tenant is fixed by the server. */
+export const simulatedDemoVerifier: IdentityVerifier = {
+  assurance: "simulated",
+  verify(credential) {
+    const c = credential as Partial<DemoRoleClaim> | null;
+    if (typeof c !== "object" || c === null || c.kind !== "simulated-demo-role-claim" || typeof c.roleId !== "string") return null;
+    if (!Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, c.roleId)) return null;
+    return { tenantId: DEMO_TENANT_ID, actorId: demoActorId(c.roleId) };
+  },
+};
+/** The boundary built from the demo verifier. Held by the demo runtime; contexts it produces are "simulated" and accepted only by consumers holding it. */
+export const demoIdentity = createIdentityBoundary(simulatedDemoVerifier);
+
+export type ResolvedRequest = { ok: true; credential: unknown; dataset: string } | { ok: false; reason: string };
+/** Demo request resolver: validates the request shape and turns the claimed role into a credential for the identity boundary to judge.
+ * It issues nothing and reads no tenant, actor, workspace or permission from the request. */
 export function resolveDemoRequest(input: unknown): ResolvedRequest {
   const req = RequestSchema.safeParse(input);
   if (!req.success) return { ok: false, reason: `Invalid request: ${req.error.issues.map((i) => i.message).join("; ")}` };
-  return { ok: true, ctx: issueTrustedContext(DEMO_TENANT_ID, demoActorId(req.data.roleId)), dataset: req.data.scenarioId };
+  const claim: DemoRoleClaim = { kind: "simulated-demo-role-claim", roleId: req.data.roleId };
+  return { ok: true, credential: claim, dataset: req.data.scenarioId };
 }
 
 /** Authorize a demo request's evidence directly (used by tests and by `authorizedRecords`). Same checks as the live path, in the same order. */
 export function authorizeDemo(req: Pick<MetaRequest, "scenarioId" | "roleId">): AuthorizationResult<PrototypeEvidence> {
   if (!SYNTHETIC_SCENARIO_ALLOWLIST.includes(req.scenarioId)) throw new Error("Scenario not in synthetic allowlist");
   workspacesForRole(req.roleId); // throws "Unknown role"
-  const ctx = issueTrustedContext(DEMO_TENANT_ID, demoActorId(req.roleId));
-  return authorizeEvidence(ctx, demoAccessPolicy, demoEvidenceStore.candidates(ctx, req.scenarioId));
+  const ctx: TrustedContext = demoIdentity.authenticateSync({ kind: "simulated-demo-role-claim", roleId: req.roleId } satisfies DemoRoleClaim);
+  return authorizeEvidence(demoIdentity, ctx, demoAccessPolicy, demoEvidenceStore.candidates(ctx, req.scenarioId));
 }

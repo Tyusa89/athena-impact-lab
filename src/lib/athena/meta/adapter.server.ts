@@ -1,10 +1,10 @@
 // Server-only Meta adapter. Exactly one request, no retries, hard token budget.
 // Never executes approvals/actions: it only returns validated text.
-import { AuthorizationError, assertAuthorized, authorizeEvidence, type AccessPolicy, type AuthorizedEvidence, type EvidenceStore, type TrustedContext } from "../core/access";
+import { AuthorizationError, assertAuthorized, authorizeEvidence, type AccessPolicy, type AuthorizedEvidence, type EvidenceStore, type IdentityBoundary } from "../core/access";
 import type { AnalysisContext } from "../core/facts";
 import type { EvidenceRecord } from "../data";
 import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
-import { demoAccessPolicy, demoEvidenceStore, resolveDemoRequest, type PrototypeEvidence, type ResolvedRequest } from "../prototypeAdapter";
+import { demoAccessPolicy, demoEvidenceStore, demoIdentity, resolveDemoRequest, type PrototypeEvidence, type ResolvedRequest } from "../prototypeAdapter";
 import {
   META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REASONING_EFFORT, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
   estimateTokens, prepareMessages, validateAuthorizedOutput, type MetaOutput,
@@ -65,14 +65,19 @@ export function authorizedFactsBlockReason(records: AuthorizedEvidence<Prototype
 }
 
 export interface EngineRuntime {
-  /** Turn an UNVERIFIED request into a trusted context and a dataset selector. The only place client input is read. */
+  /** Validate an UNVERIFIED request and extract the credential it carries plus a dataset selector. The only place client input is read.
+   * It issues no identity: the credential is handed, unread, to `identity` for verification. */
   resolve(input: unknown): ResolvedRequest;
+  /** The designated identity adapter: the only source of trusted contexts for this runtime. */
+  identity: IdentityBoundary;
+  /** A context whose assurance is "simulated" (nothing authenticated; the demo role picker) is refused unless this is true. A production runtime sets it false. */
+  allowSimulatedIdentity: boolean;
   store: EvidenceStore<PrototypeEvidence>;
   policy: AccessPolicy<PrototypeEvidence>;
   analysis: AnalysisContext;
   question: string;
 }
-export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION };
+export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, identity: demoIdentity, allowSimulatedIdentity: true, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION };
 
 export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch, runtime: EngineRuntime = PROTOTYPE_RUNTIME): Promise<MetaResult> {
   const st = metaStatus(env);
@@ -82,10 +87,11 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
   if (!req.ok) return { state: "blocked", reason: req.reason, requestSent: false };
 
   // Authorization BEFORE anything else touches the evidence. Tenant isolation is enforced inside authorizeEvidence, not by the store or policy.
-  let ctx: TrustedContext, records, withheld;
+  let records, withheld;
   try {
-    ctx = req.ctx;
-    ({ authorized: records, withheld } = authorizeEvidence(ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
+    const ctx = await runtime.identity.authenticate(req.credential); // fails closed if verification is unavailable, malformed or slow
+    if (ctx.assurance === "simulated" && !runtime.allowSimulatedIdentity) throw new AuthorizationError();
+    ({ authorized: records, withheld } = authorizeEvidence(runtime.identity, ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
   } catch (e) {
     if (!(e instanceof AuthorizationError)) console.error("Evidence store error"); // category only: never the message, ids or labels
     return { state: "blocked", reason: "Authorization failed; nothing sent.", requestSent: false };

@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthorizationError, authorizeEvidence, issueTrustedContext, type AccessPolicy, type TrustedContext } from "../core/access";
+import { AuthorizationError, authorizeEvidence, type AccessPolicy, type TrustedContext } from "../core/access";
+import { createIdentityBoundary, type VerifiedIdentity } from "../core/identity";
 import { computeAuthorizedFacts } from "../core/facts";
 import { DEMO_TENANT_ID, METRIC_LABELS, ROLES, SCENARIOS, build, type EvidenceRecord } from "../data";
 import { PROTOTYPE_CONTEXT, DEMO_QUESTION, filterVisible } from "../engine";
-import { authorizeDemo, demoAccessPolicy, demoActorId, demoEvidenceStore, resolveDemoRequest, type PrototypeEvidence } from "../prototypeAdapter";
+import { authorizeDemo, demoAccessPolicy, demoActorId, demoEvidenceStore, demoIdentity, resolveDemoRequest, type PrototypeEvidence } from "../prototypeAdapter";
 import { PROTOTYPE_RUNTIME, authorizedFactsBlockReason, runMeta, type EngineRuntime } from "./adapter.server";
 import { authorizedRecords, prepareMessages, validateAuthorizedOutput } from "./contract";
 import { buildAuthorizedFacts } from "./numericGrounding";
@@ -36,13 +37,18 @@ const bravoRecords = [
   { ...acmeRecords[0]!, tenantId: BRAVO, source: "BRAVO-SECRET Reused-Id Feed" } as PrototypeEvidence,
 ];
 const everything = [...acmeRecords, ...bravoRecords];
+// The test composition root: an adapter that reads the identity out of the credential. Real adapters validate a token instead.
+const testIdentity = createIdentityBoundary({ assurance: "verified", verify: (c) => c as VerifiedIdentity | null });
+const issueTrustedContext = (tenantId: string, actorId: string) => testIdentity.authenticateSync({ tenantId, actorId });
 const acme = (actorId = "acme-analyst") => issueTrustedContext(ACME, actorId);
 const allowWorkspaces = (grants: Record<string, string[]>): AccessPolicy<PrototypeEvidence> => ({
   evidenceScope: (c) => ({ tenantId: c.tenantId, permits: (e) => (grants[c.actorId] ?? []).includes(e.workspace) }),
 });
 const permitAll: AccessPolicy<PrototypeEvidence> = { evidenceScope: (c) => ({ tenantId: c.tenantId, permits: () => true }) };
-const runtime = (over: Partial<EngineRuntime> = {}, ctx: TrustedContext = acme()): EngineRuntime => ({
-  resolve: () => ({ ok: true, ctx, dataset: "shared" }),
+const runtime = (over: Partial<EngineRuntime> = {}, actorId = "acme-analyst"): EngineRuntime => ({
+  resolve: () => ({ ok: true, credential: { tenantId: ACME, actorId }, dataset: "shared" }),
+  identity: testIdentity,
+  allowSimulatedIdentity: false,
   store: { candidates: () => everything },
   policy: permitAll,
   analysis: PROTOTYPE_CONTEXT,
@@ -96,7 +102,7 @@ function authorizeEvidenceFor(ctx: TrustedContext) {
   return require_authorize(ctx);
 }
 function require_authorize(ctx: TrustedContext) {
-  return authorizeEvidence(ctx, demoAccessPolicy, demoEvidenceStore.candidates(ctx, "baseline"));
+  return authorizeEvidence(testIdentity, ctx, demoAccessPolicy, demoEvidenceStore.candidates(ctx, "baseline"));
 }
 
 describe("client input is never trusted", () => {
@@ -107,10 +113,12 @@ describe("client input is never trusted", () => {
     await runMeta(req("finance", "baseline", { tenantId: "tenant-other", tenant_id: "x", actorId: "demo-role:exec", workspaces: ["ws-marketing", "ws-sales", "ws-ops", "ws-finance"], permissions: ["*"], role: "exec", records: [{ id: "EVIL-1" }], isAdmin: true }), READY, crafted as never);
     expect(sent(crafted)).toEqual(sent(plain));
   });
-  it("the tenant of the context is fixed by the server's resolver, whatever the request says", () => {
-    const r = resolveDemoRequest(req("exec", "baseline", { tenantId: "tenant-other" }));
-    expect(r.ok && r.ctx.tenantId).toBe(DEMO_TENANT_ID);
-    expect(r.ok && r.ctx.actorId).toBe(demoActorId("exec"));
+  it("the tenant of the context is fixed by the server's identity adapter, whatever the request says", () => {
+    const r = resolveDemoRequest(req("exec", "baseline", { tenantId: "tenant-other", actorId: "x" }));
+    expect(r.ok).toBe(true);
+    const ctx = r.ok ? demoIdentity.authenticateSync(r.credential) : null;
+    expect(ctx?.tenantId).toBe(DEMO_TENANT_ID);
+    expect(ctx?.actorId).toBe(demoActorId("exec"));
   });
   it("an unknown or inherited role name, or a missing confirmation, is refused before any evidence is read", async () => {
     const f = fakeFetch(lane("x"));
@@ -236,7 +244,7 @@ describe("cross-tenant access through the live path", () => {
     const bodies: string[] = [];
     for (const actor of ["fin", "mkt"]) {
       const f = fakeFetch(lane("Mix may matter.", [actor === "fin" ? "F-revenue" : "F-leads"]));
-      await runMeta({}, READY, f as never, runtime({ policy }, acme(actor)));
+      await runMeta({}, READY, f as never, runtime({ policy }, actor));
       bodies.push(JSON.stringify(sent(f)));
     }
     expect(bodies[0]).toContain("F-revenue"); expect(bodies[0]).not.toContain("F-leads");
@@ -253,10 +261,10 @@ describe("bypass attempts and failures are refused with a generic result", () =>
     expect(f).not.toHaveBeenCalled();
     return r;
   };
-  it("a resolver that returns a forged context (plain object, copy, or JSON) sends nothing", async () => {
+  it("a resolver cannot inject a context: a forged ctx field is ignored and, with no credential, nothing is authenticated", async () => {
     const real = acme();
-    for (const forged of [{ tenantId: ACME, actorId: "acme-analyst" }, { ...real }, JSON.parse(JSON.stringify(real)), Object.create(real)]) {
-      const r = await blocked(runtime({ resolve: () => ({ ok: true, ctx: forged as never, dataset: "x" }) }));
+    for (const forged of [{ tenantId: ACME, actorId: "acme-analyst" }, { ...real }, JSON.parse(JSON.stringify(real)), Object.create(real), real]) {
+      const r = await blocked(runtime({ resolve: () => ({ ok: true, ctx: forged, dataset: "x" }) as never }));
       expect(r).toEqual({ state: "blocked", reason: "Authorization failed; nothing sent.", requestSent: false });
     }
   });
@@ -309,7 +317,7 @@ describe("bypass attempts and failures are refused with a generic result", () =>
   });
 });
 function authorizeEvidenceFor2(candidates: PrototypeEvidence[]) {
-  return authorizeEvidence(acme(), permitAll, candidates);
+  return authorizeEvidence(testIdentity, acme(), permitAll, candidates);
 }
 
 describe("structure: the live path cannot reach raw evidence", () => {
@@ -325,16 +333,16 @@ describe("structure: the live path cannot reach raw evidence", () => {
     expect(adapter).not.toMatch(/^import (?!type)[^;]*from "\.\.\/data"/m); // type-only imports are fine
     expect(adapter).not.toContain("RequestSchema");
   });
-  it("only the prototype adapter (the demo identity layer) may mint trusted contexts outside tests", async () => {
+  it("outside core/identity and tests, only the prototype adapter (the composition root) designates an identity adapter", async () => {
     const { readdirSync, statSync } = await import("node:fs");
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
-    const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && readFileSync(f, "utf8").includes("issueTrustedContext"));
-    expect(users.sort()).toEqual(["src/lib/athena/core/access.ts", "src/lib/athena/prototypeAdapter.ts"]);
+    const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary/.test(readFileSync(f, "utf8")));
+    expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/prototypeAdapter.ts"]);
   });
   it("the browser bundle never imports the authorization or adapter modules", async () => {
     const { readdirSync, statSync } = await import("node:fs");
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
     const client = [...walk("src/components"), ...walk("src/routes")].filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f));
-    for (const f of client) expect(readFileSync(f, "utf8"), f).not.toMatch(/core\/access|prototypeAdapter|issueTrustedContext/);
+    for (const f of client) expect(readFileSync(f, "utf8"), f).not.toMatch(/core\/access|core\/identity|prototypeAdapter|createIdentityBoundary/);
   });
 });

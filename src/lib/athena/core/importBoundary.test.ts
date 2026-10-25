@@ -25,7 +25,7 @@ const coreFiles = () => readdirSync(CORE_DIR).filter((f) => f.endsWith(".ts") &&
 
 describe("core import boundary", () => {
   it("finds the core modules", () => {
-    expect(coreFiles().sort()).toEqual(["access.ts", "catalog.ts", "evidence.ts", "facts.ts", "fixtures.ts"]);
+    expect(coreFiles().sort()).toEqual(["access.ts", "catalog.ts", "evidence.ts", "facts.ts", "fixtures.ts", "identity.ts"]);
   });
   it.each(coreFiles())("%s depends on nothing outside the core", (f) => {
     expect(boundaryViolations(readFileSync(`${CORE_DIR}/${f}`, "utf8"))).toEqual([]);

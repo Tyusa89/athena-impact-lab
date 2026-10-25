@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AuthorizationError, assertAuthorized, authorizeEvidence, isAuthorizedEvidence, isTrustedContext, issueTrustedContext, type AccessPolicy, type EvidenceScope } from "./access";
+import { AuthorizationError, assertAuthorized, authorizeEvidence as authorizeWith, isAuthorizedEvidence, type AccessPolicy, type EvidenceScope } from "./access";
 import type { Evidence } from "./evidence";
+import { createIdentityBoundary, type VerifiedIdentity } from "./identity";
 import { computeAuthorizedFacts, computeFacts, type AnalysisContext } from "./facts";
 import { SUPPORT_CATALOG, SUPPORT_PERIODS } from "./fixtures";
 
@@ -17,28 +18,33 @@ const policyFor = (grants: Record<string, string[]>): AccessPolicy => ({
 });
 const permitAll: AccessPolicy = { evidenceScope: (c) => ({ tenantId: c.tenantId, permits: () => true }) };
 
+// The test composition root: an identity adapter that "verifies" a credential by reading the identity out of it. Real adapters validate a token.
+const idn = createIdentityBoundary({ assurance: "verified", verify: (c) => c as VerifiedIdentity | null });
+const issueTrustedContext = (tenantId: string, actorId: string) => idn.authenticateSync({ tenantId, actorId });
+const authorizeEvidence = <E extends Evidence>(ctx: Parameters<typeof authorizeWith>[1], policy: AccessPolicy<E>, candidates: readonly E[]) => authorizeWith(idn, ctx, policy, candidates);
+
 const A = "tenant-a", B = "tenant-b";
 const all = [...pair(A, "A1"), ...pair(A, "A2", "csat", "%"), ...pair(B, "B1"), ...pair(B, "B2", "csat", "%")];
 
 describe("trusted context", () => {
   const ok = issueTrustedContext(A, "alice");
-  it("is issued only for non-empty, trimmed ids", () => {
-    for (const [t, a] of [["", "x"], ["x", ""], [" x", "y"], ["x", "y "], [undefined, "y"], ["x", null], [1, "y"]] as const) expect(() => issueTrustedContext(t as never, a as never)).toThrow(AuthorizationError);
+  it("is produced only for non-empty, trimmed ids", () => {
+    for (const [t, a] of [["", "x"], ["x", ""], [" x", "y"], ["x", "y "], [undefined, "y"], ["x", null], [1, "y"], ["x".repeat(257), "y"]] as const) expect(() => issueTrustedContext(t as never, a as never)).toThrow(AuthorizationError);
   });
-  it("is frozen and recognised", () => {
-    expect(isTrustedContext(ok)).toBe(true);
+  it("is frozen and recognised by its own boundary", () => {
+    expect(idn.owns(ok)).toBe(true);
     expect(Object.isFrozen(ok)).toBe(true);
     expect(() => { (ok as { tenantId: string }).tenantId = B; }).toThrow(TypeError);
   });
   it.each([
-    ["a plain object with the right fields", () => ({ tenantId: A, actorId: "alice" })],
+    ["a plain object with the right fields", () => ({ tenantId: A, actorId: "alice", assurance: "verified" })],
     ["a spread copy of a real context", () => ({ ...ok })],
     ["a JSON round trip", () => JSON.parse(JSON.stringify(ok))],
     ["an object inheriting from a real context", () => Object.create(ok)],
     ["null", () => null],
     ["a string", () => "tenant-a"],
   ])("a forged context (%s) is refused", (_n, make) => {
-    expect(isTrustedContext(make())).toBe(false);
+    expect(idn.owns(make())).toBe(false);
     expect(() => authorizeEvidence(make() as never, permitAll, all)).toThrow(AuthorizationError);
   });
 });

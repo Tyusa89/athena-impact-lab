@@ -58,10 +58,10 @@ function provider(answer: (r: ModelRequest) => ModelOutcome | Promise<ModelOutco
 const lanes = (text: string, refs: string[], extra: object = {}) => JSON.stringify({ interpretations: [{ text, verified: false, refs, ...extra }], missing_evidence: ["No channel attribution."], recommendations: [{ text: "Review the process with the owner.", requires_human_approval: true, refs }] });
 const completion = (content: string): ModelOutcome => ({ kind: "completion", content, truncated: false, usage: { max_tokens_sent: MAX_OUTPUT_TOKENS, prompt_tokens: 500, completion_tokens: 100 } });
 
-function runtime(ledger: EvidenceLedger, d: Dataset, tenant: string, actor: string, p: ModelProvider, policy: AccessPolicy<Evidence>, store: EngineRuntime["store"] = ledger.store as never): EngineRuntime {
+function runtime(ledger: EvidenceLedger, d: Dataset, tenant: string, actor: string, p: ModelProvider, policy: AccessPolicy<Evidence>, store: EngineRuntime["store"] = ledger.store): EngineRuntime {
   return {
     resolve: () => ({ ok: true, credential: { tenantId: tenant, actorId: actor }, dataset: "main" }),
-    identity, allowSimulatedIdentity: false, store, policy: policy as never, analysis: d.analysis, question: d.question, provider: p,
+    identity, allowSimulatedIdentity: false, store, policy, analysis: d.analysis, question: d.question, provider: p,
   };
 }
 const go = (rt: EngineRuntime) => runMeta({}, READY, noFetch, rt);
@@ -93,7 +93,7 @@ describe.each([OPS, DESK])("dataset $name: the same ingestion and evidence infra
     const { authorized } = authorizeEvidence(identity, ctx, domainPolicy({ importer: "*" }), ledger.store.candidates(ctx, "main"));
     computeAuthorizedFacts(authorized, d.analysis);
     renderFindings(authorized, d.analysis);
-    prepareMessages(d.question, authorized as never, d.analysis);
+    prepareMessages(d.question, authorized, d.analysis);
     expect(p.requests).toHaveLength(0);
   });
   it("runs the whole live pipeline: verified findings and citations from the server, model lanes unverified and approval-gated", async () => {
@@ -276,7 +276,7 @@ describe("one tenant's imported data cannot become another tenant's evidence", (
     load(ledger, OPS, "tenant-ops");
     load(ledger, DESK, "tenant-desk");
     // a deliberately leaky store: returns BOTH tenants' evidence to whoever asks
-    const leaky: EngineRuntime["store"] = { candidates: (_ctx, dataset) => [...ledger.store.candidates(trusted("tenant-ops"), dataset), ...ledger.store.candidates(trusted("tenant-desk"), dataset)] as never };
+    const leaky: EngineRuntime["store"] = { candidates: (_ctx, dataset) => [...ledger.store.candidates(trusted("tenant-ops"), dataset), ...ledger.store.candidates(trusted("tenant-desk"), dataset)] };
     const opsProvider = provider(() => completion(lanes("Mix may matter.", ["F-leads"])));
     const deskProvider = provider(() => completion(lanes("Mix may matter.", ["F-tickets_opened"])));
     const a = await go(runtime(ledger, OPS, "tenant-ops", "importer", opsProvider, overSharing, leaky));
@@ -293,7 +293,7 @@ describe("one tenant's imported data cannot become another tenant's evidence", (
     const ledger = createEvidenceLedger(identity);
     load(ledger, OPS, "tenant-ops");
     load(ledger, DESK, "tenant-desk");
-    const leaky: EngineRuntime["store"] = { candidates: (_c, d) => [...ledger.store.candidates(trusted("tenant-ops"), d), ...ledger.store.candidates(trusted("tenant-desk"), d)] as never };
+    const leaky: EngineRuntime["store"] = { candidates: (_c, d) => [...ledger.store.candidates(trusted("tenant-ops"), d), ...ledger.store.candidates(trusted("tenant-desk"), d)] };
     const r = await go(runtime(ledger, OPS, "tenant-ops", "importer", provider(() => completion(lanes("See desk-export:L2 for context.", ["F-leads"]))), overSharing, leaky));
     expect(r.state).toBe("rejected");
     expect(JSON.stringify(r)).not.toContain("desk-export");

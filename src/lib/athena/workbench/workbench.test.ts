@@ -303,7 +303,7 @@ describe("the engine result's evidence is server-only", () => {
     if (r.state !== "ok") throw new Error("blocked");
     expect(r.records.length).toBeGreaterThan(0);
     expect(Object.keys(r).sort()).toEqual(["authorizedIds", "impact", "state"]);
-    expect(JSON.stringify(r)).not.toContain("SYN-CRM");
+    expect(JSON.stringify(r)).not.toMatch(/"tenantId"|"workspace"|"value":/);
     expect(Object.keys({ ...r })).not.toContain("records");
   });
 });

@@ -82,13 +82,13 @@ export function nonAsciiNumerics(text: string, recordIds: readonly string[]): st
   return (scannable(text, recordIds).match(/\p{N}/gu) ?? []).filter((ch) => !/^[0-9]$/.test(ch));
 }
 
-/** Strict numeral rule: model-authored text may contain no numerals (record ids, Q1-Q4 labels and years are exempt). */
+/** Strict numeral rule: model-authored text may contain no numerals (record ids, Q1-Q4 labels and reporting-period references are exempt).
+ * Messages never quote the text, so they cannot echo an identifier the model wrote. */
 export function verifyNoNumerals(text: string, recordIds: readonly string[]): string[] {
   const errs: string[] = [];
-  const shown = text.slice(0, 40);
   const odd = nonAsciiNumerics(text, recordIds);
-  if (odd.length) errs.push(`Non-ASCII numeric character(s) ${odd.slice(0, 3).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(",")} in text "${shown}": rejected`);
+  if (odd.length) errs.push(`Non-ASCII numeric character(s) ${odd.slice(0, 3).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(",")} in model text: rejected`);
   const nums = numericTokens(text, recordIds);
-  if (nums.length) errs.push(`Numeral ${nums[0]} not allowed in model text "${shown}": numbers appear only in Athena-computed findings`);
+  if (nums.length) errs.push(`Numeral ${nums[0]} not allowed in model text: numbers appear only in Athena-computed findings`);
   return errs;
 }

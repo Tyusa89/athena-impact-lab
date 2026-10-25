@@ -12,7 +12,7 @@ import { z } from "zod";
 import { PERIODS, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
 import { renderFindings, type VerifiedFinding } from "./findings";
-import { checkSemantics } from "./semanticGuards";
+import { checkSemantics, semanticScope } from "./semanticGuards";
 import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
@@ -142,9 +142,13 @@ export function hasCausalClaim(text: string, allowInvestigative: boolean): boole
   return false;
 }
 
-export type ValidationResult = { ok: true; output: MetaOutput; findings: VerifiedFinding[] } | { ok: false; errors: string[] };
+/** `categories` are safe internal diagnostic codes (no text, ids or labels) that may be logged server-side. */
+export type ValidationResult = { ok: true; output: MetaOutput; findings: VerifiedFinding[] } | { ok: false; errors: string[]; categories: string[] };
+const fail = (...issues: { code: string; message: string }[]): ValidationResult => ({ ok: false, errors: issues.map((i) => i.message), categories: [...new Set(issues.map((i) => i.code))] });
 
 const LEGACY_MESSAGE = "Legacy response format rejected: observations, hypotheses, claims and cited_ids are no longer accepted; send interpretations, recommendations and missing_evidence with fact refs";
+/** Deliberately generic: never names the record, source or identifier that triggered it. */
+const LEAK_MESSAGE = "Cross-workspace leak: the output refers to a record or source outside the authorized scope";
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 function isLegacyShape(json: unknown): boolean {
   if (!isObject(json)) return false;
@@ -152,38 +156,40 @@ function isLegacyShape(json: unknown): boolean {
   return ["interpretations", "recommendations"].some((k) => Array.isArray(json[k]) && (json[k] as unknown[]).some((it) => isObject(it) && ("cited_ids" in it || "claims" in it)));
 }
 
-/** Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy. */
+/**
+ * Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy and semantic guards.
+ * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
+ */
 export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[]): ValidationResult {
   let json: unknown;
-  try { json = JSON.parse(raw); } catch { return { ok: false, errors: ["Output is not valid JSON"] }; }
-  if (isLegacyShape(json)) return { ok: false, errors: [LEGACY_MESSAGE] };
+  try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
+  if (isLegacyShape(json)) return fail({ code: "legacy", message: LEGACY_MESSAGE });
   const parsed = OutputSchema.safeParse(json);
-  if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => `Schema: ${i.path.join(".") || "(root)"} ${i.message}`) };
+  // Paths come from the schema itself. The unrecognized-key message is replaced because it would echo model-supplied key names (which could be unauthorized identifiers).
+  if (!parsed.success) return fail(...parsed.error.issues.map((i) => ({ code: "schema", message: `Schema: ${i.path.join(".") || "(root)"} ${i.code === "unrecognized_keys" ? `contains ${i.keys.length} unrecognized key(s)` : i.message}` })));
   const out = parsed.data;
   const facts = buildVerifiedFacts(authorized);
   const known = new Set(facts.map((f) => f.fact_id));
   const hidden = allRecords.filter((r) => !authorized.some((a) => a.id === r.id));
-  const errors: string[] = [];
-  for (const ref of new Set([...out.interpretations, ...out.recommendations].flatMap((x) => x.refs))) if (!known.has(ref)) errors.push(`Unknown or unauthorized fact reference: ${ref}`);
   const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
+  // A leak is reported on its own, so nothing else (which might quote model text) is returned alongside it.
   const textKeys = texts.map(leakKey);
-  for (const r of hidden) {
-    const idKey = leakKey(r.id), sourceKey = leakKey(r.source);
-    if (textKeys.some((k) => (idKey && k.includes(idKey)) || (sourceKey && k.includes(sourceKey)))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
-  }
-  const causalChecks: [string, boolean][] = [
-    ...out.interpretations.map((x) => [x.text, false] as [string, boolean]),
-    ...out.missing_evidence.map((x) => [x, true] as [string, boolean]),
-    ...out.recommendations.map((x) => [x.text, true] as [string, boolean]),
+  if (hidden.some((r) => { const idKey = leakKey(r.id), sourceKey = leakKey(r.source); return textKeys.some((k) => (idKey && k.includes(idKey)) || (sourceKey && k.includes(sourceKey))); })) return fail({ code: "leak", message: LEAK_MESSAGE });
+  const issues: { code: string; message: string }[] = [];
+  const badRefs = new Set([...out.interpretations, ...out.recommendations].flatMap((x) => x.refs).filter((ref) => !known.has(ref)));
+  if (badRefs.size) issues.push({ code: "ref", message: `Unknown or unauthorized fact reference: ${badRefs.size} reference(s) rejected` });
+  const lanes: { text: string; lane: "interpretation" | "recommendation" | "gap"; where: string }[] = [
+    ...out.interpretations.map((x, i) => ({ text: x.text, lane: "interpretation" as const, where: `interpretation ${i + 1}` })),
+    ...out.recommendations.map((x, i) => ({ text: x.text, lane: "recommendation" as const, where: `proposed action ${i + 1}` })),
+    ...out.missing_evidence.map((t, i) => ({ text: t, lane: "gap" as const, where: `gap ${i + 1}` })),
   ];
-  for (const [t, inv] of causalChecks) if (hasCausalClaim(t, inv)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
+  for (const l of lanes) if (hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
   const recordIds = allRecords.map((r) => r.id);
-  for (const t of texts) errors.push(...verifyNoNumerals(t, recordIds));
-  // Semantic guards (Phase 2B-2): directional contradictions, magnitude expressions, unauthorized domains. Reject, never rewrite.
-  for (const x of out.interpretations) errors.push(...checkSemantics(x.text, "interpretation", facts));
-  for (const x of out.recommendations) errors.push(...checkSemantics(x.text, "recommendation", facts));
-  for (const t of out.missing_evidence) errors.push(...checkSemantics(t, "gap", facts));
-  if (errors.length) return { ok: false, errors };
+  for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds)) issues.push({ code: "numeral", message });
+  // Semantic guards: directional contradictions, magnitude expressions, unauthorized or unavailable domains. Reject, never rewrite.
+  const scope = semanticScope(authorized, facts);
+  for (const l of lanes) for (const i of checkSemantics(l.text, l.lane, scope, l.where)) issues.push({ code: i.code, message: i.message });
+  if (issues.length) return fail(...issues);
   const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
   return {
     ok: true,

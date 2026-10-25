@@ -3,7 +3,7 @@ import { METRIC_LABELS, ROLES, SCENARIOS, type MetricKey } from "../data";
 import { runMeta } from "./adapter.server";
 import { MAX_INPUT_TOKENS, authorizedRecords, buildMessages, estimateTokens, validateOutput } from "./contract";
 import { buildVerifiedFacts } from "./numericGrounding";
-import { RESIDUAL_LIMITATIONS, checkSemantics, directionalClaims, magnitudeExpressions, semanticText } from "./semanticGuards";
+import { METRIC_DEPARTMENT, RESIDUAL_LIMITATIONS, checkSemantics, directionalClaims, magnitudeExpressions, semanticScope, semanticText } from "./semanticGuards";
 
 // Phase 2B-2 semantic guards. No network: fetch is always a local fake.
 const READY = { META_MODEL_API_KEY: "test-key", META_MODEL_ENABLED: "true" };
@@ -13,6 +13,7 @@ const REFS: Record<string, string[]> = { exec: ["F-revenue"], marketing: ["F-lea
 const req = (roleId = "exec", scenarioId = "baseline") => ({ scenarioId, roleId, ownerConfirmed: true });
 const ALL = (id = "baseline") => SCENARIOS.find((s) => s.id === id)!.records;
 const factsFor = (role: string, scenario = "baseline") => buildVerifiedFacts(authorizedRecords(req(role, scenario)));
+const scopeFor = (role: string, scenario = "baseline") => { const recs = authorizedRecords(req(role, scenario)); return semanticScope(recs, buildVerifiedFacts(recs)); };
 const body = (text: string, lane: Lane, role: string) => ({
   interpretations: lane === "interp" ? [{ text, verified: false, refs: REFS[role]! }] : [],
   missing_evidence: lane === "gap" ? [text] : [],
@@ -23,16 +24,18 @@ const validate = (text: string, lane: Lane, role = "exec") => {
   const v = validateOutput(JSON.stringify(body(text, lane, role)), authorizedRecords(req(role)), ALL());
   return v.ok ? null : v.errors.join(" | ");
 };
-/** Errors from the semantic guards only. */
-const sem = (text: string, lane: Lane, role = "exec", scenario = "baseline") =>
-  checkSemantics(text, lane === "interp" ? "interpretation" : lane === "rec" ? "recommendation" : "gap", factsFor(role, scenario));
+const laneName = (lane: Lane) => (lane === "interp" ? "interpretation" : lane === "rec" ? "recommendation" : "gap") as "interpretation" | "recommendation" | "gap";
+/** Structured issues from the semantic guards only. */
+const issues = (text: string, lane: Lane, role = "exec", scenario = "baseline") => checkSemantics(text, laneName(lane), scopeFor(role, scenario), "text");
+/** Messages from the semantic guards only. */
+const sem = (text: string, lane: Lane, role = "exec", scenario = "baseline") => issues(text, lane, role, scenario).map((i) => i.message);
 const reply = (content: unknown) =>
   vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) }, finish_reason: "stop" }], usage: { prompt_tokens: 900, completion_tokens: 200 } }), { status: 200 }));
 
 // ---------------------------------------------------------------- corpora
-/** Legitimate business explanations: every one MUST be accepted (any rejection is a false reject). Includes a held-out half
- * that was written and run once before any further tuning. */
-const LEGIT: Item[] = [
+/** AUTHOR-WRITTEN legitimate explanations (126). The first 86 were written while tuning the guards; the last 40 were a held-out set
+ * run once and then used to fix a miss, so none of these is an independent measurement. Every one MUST be accepted. */
+const AUTHOR_LEGIT: Item[] = [
   ["exec", "interp", "Lead volume rose while conversion fell, so lower-intent leads may be diluting the pipeline."],
   ["exec", "interp", "Fulfillment delays and rising backorders may be suppressing closes."],
   ["exec", "interp", "A change in the lead scoring definition could shift lead quality without a real change."],
@@ -160,8 +163,8 @@ const LEGIT: Item[] = [
   ["exec", "interp", "Staffing gaps could be slowing lead follow-up."],
   ["exec", "interp", "Both lead quality and conversion are lower than in Q2 2026."],
 ];
-/** Contradictions, unsupported magnitudes and unauthorized-domain claims: every one MUST be rejected by some guard. */
-const BAD: Item[] = [
+/** AUTHOR-WRITTEN contradictions, unsupported magnitudes and unauthorized-domain claims (146; same provenance as above). Every one MUST be rejected. */
+const AUTHOR_BAD: Item[] = [
   ["exec", "interp", "Revenue rose sharply."],
   ["exec", "interp", "Revenue has risen."],
   ["exec", "interp", "Revenue is up."],
@@ -318,17 +321,24 @@ const KNOWN_MISS: Item[] = [
   ["exec", "interp", "Revenue rallied."],
 ];
 
-// ---------------------------------------------------------------- measured rates
-describe("measured on the corpora", () => {
-  it("false rejects on legitimate business explanations: zero", () => {
-    const falseRejects = LEGIT.filter(([role, lane, text]) => validate(text, lane, role) !== null).map(([r, l, t]) => `[${r}/${l}] ${t}`);
-    expect(falseRejects).toEqual([]);
-    expect(LEGIT.length).toBeGreaterThanOrEqual(120);
+// ---------------------------------------------------------------- author-written corpora (regression only)
+// These sets were written by the same author as the guards and were tuned against. Passing them shows the guards still behave as
+// designed; it is NOT an estimate of real-world false-reject or bypass rates. Independent and blind sets are in semanticIndependent.test.ts.
+describe("author-written corpora (regression, not an independent measurement)", () => {
+  it("author-tuned legitimate texts (86): none rejected", () => {
+    expect(AUTHOR_LEGIT.slice(0, 86).filter(([r, l, t]) => validate(t, l, r) !== null).map(([r, l, t]) => `[${r}/${l}] ${t}`)).toEqual([]);
   });
-  it("bypasses on contradictions, magnitudes and unauthorized-domain claims: zero", () => {
-    const bypasses = BAD.filter(([role, lane, text]) => validate(text, lane, role) === null).map(([r, l, t]) => `[${r}/${l}] ${t}`);
-    expect(bypasses).toEqual([]);
-    expect(BAD.length).toBeGreaterThanOrEqual(140);
+  it("author held-out legitimate texts (40, since spent): none rejected", () => {
+    expect(AUTHOR_LEGIT.slice(86).filter(([r, l, t]) => validate(t, l, r) !== null).map(([r, l, t]) => `[${r}/${l}] ${t}`)).toEqual([]);
+  });
+  it("author-tuned adversarial texts (120): all rejected", () => {
+    expect(AUTHOR_BAD.slice(0, 120).filter(([r, l, t]) => validate(t, l, r) === null).map(([r, l, t]) => `[${r}/${l}] ${t}`)).toEqual([]);
+  });
+  it("author held-out adversarial texts (26, since spent): all rejected", () => {
+    expect(AUTHOR_BAD.slice(120).filter(([r, l, t]) => validate(t, l, r) === null).map(([r, l, t]) => `[${r}/${l}] ${t}`)).toEqual([]);
+  });
+  it("corpus sizes are as documented", () => {
+    expect([AUTHOR_LEGIT.length, AUTHOR_BAD.length]).toEqual([126, 146]);
   });
   it("KNOWN residual gaps are still accepted (pinned so any change is deliberate)", () => {
     for (const [role, lane, text] of KNOWN_MISS) expect(validate(text, lane, role), text).toBeNull();
@@ -425,7 +435,7 @@ describe("magnitude guard: no unsupported magnitude expressions", () => {
     ["spelled percent", "Revenue fell forty percent.", "percent"], ["hyphenated spelled percent", "Revenue fell forty-two per cent.", "percent"],
     ["percent sign", "Revenue fell a lot %.", "percent"], ["pct", "Revenue fell forty pct.", "percent"], ["basis points", "Revenue slipped by 100 basis points.", "percent"],
     ["percentage points", "Conversion lost a few percentage points.", "percent"], ["doubled", "Revenue doubled.", "multiple"], ["tripled", "Revenue tripled.", "multiple"],
-    ["quadrupled", "Leads quadrupled.", "multiple"], ["halved", "Revenue halved versus Q2.", "multiple"], ["twice", "Leads were twice as many.", "multiple"],
+    ["quadrupled", "Leads quadrupled.", "multiple"], ["halved", "Revenue halved versus Q2.", "multiple"], ["twice", "Leads were twice as many.", "twice"],
     ["multiplied", "Leads multiplied.", "multiple"], ["factor of", "Leads rose by a factor of three.", "multiple"], ["tenfold", "Leads rose tenfold.", "fold"],
     ["two-fold", "Leads rose two-fold.", "fold"], ["times", "Leads rose three times.", "times"], ["times faster", "Revenue fell ten times faster.", "times"],
     ["order of magnitude", "Revenue fell by an order of magnitude.", "order-of-magnitude"], ["double-digit", "Double-digit growth in leads.", "digit-band"],
@@ -602,5 +612,183 @@ describe("residual limitations (documented, pinned)", () => {
   });
   it("qualitative strength words are not magnitude-checked", () => {
     expect(sem("Revenue fell dramatically.", "interp")).toEqual([]);
+  });
+});
+
+// ================================================================ Phase 2B-2 corrective pass
+// ---------------------------------------------------------------- B1: subject binding
+describe("B1: the head metric is the subject, not a nearby secondary metric or department", () => {
+  // baseline x exec: revenue DOWN, leads UP, conversion DOWN, CAC UP
+  it.each([
+    "Revenue from new leads rose.", "Revenue from leads rose.", "Revenue of new leads grew.", "Revenue from marketing campaigns grew.",
+    "Conversion of qualified leads improved.", "Sales revenue from the campaign grew.", "Revenue per closed deal rose.",
+    "Revenue from the long tail of accounts grew.", "Revenue from enterprise leads rose.", "Total revenue from all channels has risen.",
+    "Conversion in the enterprise segment is improving.", "Conversion across the new lead segments improved.",
+  ])("a contradiction about the head metric is rejected: %s", (text) => {
+    expect(sem(text, "interp").join()).toContain("Semantic guard (direction)");
+  });
+  it.each([
+    "Revenue from new leads fell.", "Conversion of new leads fell.", "Conversion of qualified leads has declined.", "Revenue from enterprise leads fell.",
+    "Revenue from the long tail of accounts fell.", "Sales revenue from the campaign declined.", "Conversion in the enterprise segment is weaker.",
+  ])("a consistent statement about the head metric is accepted, even though a nearer metric disagrees: %s", (text) => {
+    expect(sem(text, "interp"), text).toEqual([]);
+  });
+  it("the nearer secondary metric or department never becomes the subject", () => {
+    const only = (t: string) => directionalClaims(t, "interpretation").flatMap((c) => c.entities.map((e) => e.key));
+    expect(only("Revenue from new leads rose.")).toEqual(["revenue"]);
+    expect(only("Conversion of new leads fell.")).toEqual(["conversion_rate"]);
+    expect(only("Sales revenue from the campaign grew.")).toEqual(["revenue"]);
+    expect(only("Revenue from paid social campaigns fell.")).toEqual(["revenue"]);
+  });
+  it("apposition: the commented-off phrase is dropped before binding", () => {
+    expect(sem("Revenue, driven by new leads, rose.", "interp").join()).toContain("(direction)");
+    expect(sem("Revenue, helped by pricing, rose.", "interp").join()).toContain("(direction)");
+    expect(sem("Revenue, driven by new leads, fell.", "interp")).toEqual([]);
+    expect(sem("Revenue, which was lifted by new leads, fell.", "interp")).toEqual([]);
+  });
+  it("in-scope sentences with an out-of-scope modifier are not domain violations (finance)", () => {
+    for (const t of ["Revenue from sales declined.", "Revenue from paid social campaigns fell.", "Sales revenue declined.", "Revenue from marketing campaigns fell."])
+      expect(sem(t, "interp", "finance"), t).toEqual([]);
+    expect(sem("Revenue from sales rose.", "interp", "finance").join()).toContain("(direction)"); // still a contradiction about revenue
+  });
+  it("an out-of-scope HEAD is still a domain violation even when a modifier is in scope (ops)", () => {
+    expect(sem("Revenue from enterprise deals rose.", "interp", "ops").join()).toContain("(domain)");
+    expect(sem("Revenue per lead improved.", "interp", "marketing").join()).toContain("(domain)");
+    expect(sem("Revenue from existing customers fell.", "interp", "ops").join()).toContain("(domain)");
+  });
+  it("ambiguous binding yields no claim (nothing is inferred or rejected)", () => {
+    for (const t of ["Revenue versus conversion rose.", "Revenue against leads fell.", "Conversion relative to revenue improved."]) {
+      expect(directionalClaims(t, "interpretation"), t).toEqual([]);
+      expect(sem(t, "interp"), t).toEqual([]);
+    }
+  });
+  it("explicit conjunctions still bind every conjunct", () => {
+    expect(sem("Revenue and conversion both rose.", "interp").join()).toContain("(direction)");
+    expect(sem("Lead volume and backorders rose.", "interp")).toEqual([]);
+    expect(sem("Revenue from leads and campaigns rose.", "interp").join()).toContain("(direction)");
+  });
+  it("a measure noun between metric and verb is the same subject; an unrelated noun is not", () => {
+    expect(sem("Revenue performance strengthened.", "interp").join()).toContain("(direction)");
+    expect(sem("Revenue concerns have grown.", "interp")).toEqual([]);
+    expect(sem("Conversion issues increased.", "interp")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------- B2: context-sensitive magnitude
+describe("B2: magnitude words are checked where they describe performance, not ordinary process language", () => {
+  it.each([
+    ["rec", "Review the funnel twice a week."], ["rec", "Review revenue twice a week."], ["rec", "Split the lead-score pilot in half to compare two gates."],
+    ["rec", "Follow up with each lead three times before closing."], ["rec", "Check conversion three times a week."], ["interp", "A third explanation is seasonality."],
+    ["rec", "Interview a dozen customers who churned."], ["rec", "Pull a hundred closed-lost records for review."], ["rec", "Allocate a quarter of the team's time to triage."],
+    ["rec", "Address the two points raised by sales."], ["gap", "Take half a day to audit lead sources."], ["rec", "Run the lead-score pilot on half of inbound leads."],
+    ["rec", "Compare closed deals across a third segment."], ["rec", "Prioritise the dozen largest backorders."], ["gap", "Need three times more history to judge."],
+    ["gap", "A third data source for lead attribution is missing."], ["rec", "Contact each lead twice before handing off."], ["interp", "Both of the two segments overlap."],
+    ["interp", "Conversion is reviewed twice a week by the team."], ["interp", "Revenue is reported twice a month."], ["interp", "Backorders are checked twice per day."],
+  ] as [Lane, string][])("process language is accepted (%s): %s", (lane, text) => {
+    expect(sem(text, lane).filter((m) => m.includes("(magnitude)")), text).toEqual([]);
+  });
+  it.each([
+    ["interp", "Half of the leads were low quality."], ["interp", "A third of leads were low quality."], ["interp", "Three quarters of the deals were lost."],
+    ["interp", "Revenue fell by half."], ["interp", "Revenue was cut in half."], ["interp", "Leads were twice as many."], ["interp", "Revenue fell ten times faster."],
+    ["interp", "Leads rose three times."], ["interp", "Thousands of leads arrived."], ["interp", "A dozen leads converted."], ["interp", "Revenue was five dollars short."],
+    ["interp", "Revenue shrank by two thirds."], ["interp", "Revenue collapsed to a quarter of its prior level."], ["interp", "Revenue was cut by a third."],
+    ["rec", "Reduce backorders by half."], ["rec", "Cut backorders by a third."], ["rec", "Grow leads tenfold."], ["gap", "Need forty percent more data."],
+  ] as [Lane, string][])("unsupported quantitative claims about metric performance are rejected (%s): %s", (lane, text) => {
+    expect(sem(text, lane).join(), text).toContain("(magnitude)");
+  });
+  it("inherently quantitative forms are rejected in every lane and context", () => {
+    for (const lane of ["interp", "rec", "gap"] as Lane[]) for (const t of ["Forty percent of the plan is done.", "The pilot doubled the sample.", "Aim for double-digit coverage.", "A tenfold increase in effort."])
+      expect(sem(t, lane).join(), `${lane}: ${t}`).toContain("(magnitude)");
+  });
+  it("cadence is exempt even in an interpretation that mentions a metric, but a multiplier of the metric is not", () => {
+    expect(magnitudeExpressions("Conversion is reviewed twice a week by the team.", "interpretation")).toEqual([]);
+    expect(magnitudeExpressions("Conversion was twice the prior level.", "interpretation")).toContain("twice");
+  });
+  it("lanes differ: a clause in an action or gap needs a metric AND a movement/target word; an interpretation needs only a metric", () => {
+    expect(magnitudeExpressions("Pull a hundred leads for review.", "recommendation")).toEqual([]);
+    expect(magnitudeExpressions("Pull a hundred leads for review.", "interpretation")).toContain("scale-word");
+    expect(magnitudeExpressions("Reduce leads by half.", "recommendation")).toContain("half");
+    expect(magnitudeExpressions("A dozen leads in the review.", "gap")).toEqual([]);
+  });
+  it("messages name the kind of expression but never echo the text", () => {
+    const [m] = sem("Half of the leads were low quality.", "interp");
+    expect(m).toContain("unsupported half expression");
+    expect(m).not.toContain("leads were low");
+  });
+});
+
+// ---------------------------------------------------------------- S5-S7: language context
+describe("S5-S7: habitual statements, non-metric subjects, questions and monitoring are not claims about the verified period", () => {
+  it.each([
+    "Revenue typically rises in the fourth quarter.", "Retail revenue usually climbs before the holidays.", "Seasonally, lead volume often falls in summer.",
+    "Conversion generally improves when follow-up is faster.", "Closed deals tend to slip when fulfillment delays grow.", "Lead volume historically rises in Q4.",
+    "On average, revenue rises in the holiday season.",
+  ])("habitual or generic: %s", (text) => {
+    expect(sem(text, "interp"), text).toEqual([]);
+  });
+  it.each([
+    "Lead volume fell short of the target.", "Lead volume fell flat.", "Revenue rose to the occasion.", "Conversion fell behind plan.",
+  ])("idiom: %s", (text) => {
+    expect(sem(text, "interp"), text).toEqual([]);
+  });
+  it.each([
+    "Concern about revenue grew.", "Pressure on revenue rose.", "Questions about conversion have increased.", "Interest in lead quality has grown across the team.",
+    "Customer complaints about conversion rose.", "Scrutiny of closed deals has risen.", "Revenue concerns have grown.",
+  ])("non-metric subject: %s", (text) => {
+    expect(sem(text, "interp"), text).toEqual([]);
+  });
+  it.each(["Is revenue still falling?", "Why did conversion fall while lead volume rose?", "Did revenue rise?", "Has lead quality improved?"])("question: %s", (text) => {
+    expect(sem(text, "interp"), text).toEqual([]);
+  });
+  it.each([
+    "Watch whether revenue is rising again next quarter.", "Monitor whether backorders keep falling.", "Watch for revenue rising in Q4.",
+    "Track revenue as it rises.", "Monitor revenue rising after the pricing change.", "Check if conversion is improving.",
+  ])("monitoring recommendation: %s", (text) => {
+    expect(sem(text, "rec"), text).toEqual([]);
+  });
+  it("actual contradictions are still rejected next to those exemptions", () => {
+    for (const t of ["Revenue rose.", "Revenue rose, and it typically rises in Q4.", "Pressure on revenue rose and revenue grew.", "Is revenue falling? Revenue rose."])
+      expect(sem(t, "interp").join(), t).toContain("(direction)");
+    for (const t of ["Capitalise on rising revenue.", "Revenue rose, so hire more staff."]) expect(sem(t, "rec").join(), t).toContain("(direction)");
+  });
+  it("a monitoring directive does not exempt a claim about an unauthorized domain", () => {
+    expect(sem("Watch lead volume rising.", "rec", "finance").join()).toContain("(domain)");
+  });
+});
+
+// ---------------------------------------------------------------- S9: unauthorized vs unavailable
+describe("S9: unavailable data is distinguished from unauthorized data", () => {
+  it("a role with no authority over the department gets a domain error", () => {
+    const [i] = issues("Customer acquisition cost rose.", "interp", "finance");
+    expect(i!.code).toBe("domain");
+    expect(i!.message).toContain("outside this role's authorized scope");
+  });
+  it("an authorized department whose metric has no data in this scenario gets an unavailable error", () => {
+    const [i] = issues("Customer acquisition cost rose.", "interp", "exec", "quality-only");
+    expect(i!.code).toBe("unavailable");
+    expect(i!.message).toContain("no verified data is available in this scenario");
+    expect(i!.message).not.toContain("authorized scope");
+  });
+  it("the same metric with data is compared to its verified finding (baseline)", () => {
+    expect(issues("Customer acquisition cost rose.", "interp", "exec", "baseline")).toEqual([]);
+    expect(issues("Customer acquisition cost fell.", "interp", "exec", "baseline")[0]!.code).toBe("direction");
+  });
+  it("matrix: every scenario x role x metric is classified as domain / unavailable / compared exactly as its scope dictates", () => {
+    const TERM: Record<MetricKey, string> = { leads: "Lead volume", mql_rate: "Lead quality", conversion_rate: "Conversion", closed_deals: "Closed deals", fulfillment_days: "Fulfillment time", backorder_rate: "Backorders", revenue: "Revenue", cac: "Customer acquisition cost" };
+    const wrong: string[] = [];
+    for (const sc of SCENARIOS) for (const r of ROLES) {
+      const recs = authorizedRecords(req(r.id, sc.id));
+      const depts = new Set(recs.map((x) => x.department));
+      const have = new Set(buildVerifiedFacts(recs).map((f) => f.metric));
+      for (const m of Object.keys(TERM) as MetricKey[]) {
+        const got = issues(`${TERM[m]} rose.`, "interp", r.id, sc.id).map((i) => i.code);
+        const want = !depts.has(METRIC_DEPARTMENT[m]) ? ["domain"] : !have.has(m) ? ["unavailable"] : null;
+        if (want ? got.join() !== want.join() : got.some((c) => c !== "direction")) wrong.push(`${sc.id}/${r.id}/${m}: got [${got}] want ${want ?? "direction-or-none"}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+  it("METRIC_DEPARTMENT agrees with the data for every record in every scenario", () => {
+    for (const sc of SCENARIOS) for (const r of sc.records) expect(METRIC_DEPARTMENT[r.metric], `${sc.id}/${r.id}`).toBe(r.department);
   });
 });

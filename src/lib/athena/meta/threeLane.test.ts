@@ -126,19 +126,23 @@ describe("wrong-subject and magnitude-by-number attacks are rejected (model text
 
 describe("unauthorized and malformed references are rejected", () => {
   it("finance cannot reference a marketing fact", async () => {
-    expect(await rejected(lanes("Leads may matter.", ["F-leads"]), "finance")).toContain("Unknown or unauthorized fact reference: F-leads");
+    expect(await rejected(lanes("Leads may matter.", ["F-leads"]), "finance")).toContain("Unknown or unauthorized fact reference");
   });
   it("marketing cannot reference a finance fact", async () => {
-    expect(await rejected(lanes("Revenue may matter.", ["F-revenue"]), "marketing")).toContain("Unknown or unauthorized fact reference: F-revenue");
+    expect(await rejected(lanes("Revenue may matter.", ["F-revenue"]), "marketing")).toContain("Unknown or unauthorized fact reference");
   });
   it("one unauthorized ref among authorized ones rejects the item", async () => {
-    expect(await rejected(lanes("Mix may matter.", ["F-revenue", "F-leads"]), "finance")).toContain("F-leads");
+    const e = await rejected(lanes("Mix may matter.", ["F-revenue", "F-leads"]), "finance");
+    expect(e).toContain("Unknown or unauthorized fact reference");
+    expect(e).not.toContain("F-leads"); // the hidden fact id is never echoed
   });
   it("a record id is not a fact reference", async () => {
     expect(await rejected(lanes("Revenue may matter.", ["VH-FIN-001-Q3"]))).toContain("Unknown or unauthorized fact reference");
   });
   it("unknown fact ids, empty refs and too many refs fail", async () => {
-    expect(await rejected(lanes("x may matter.", ["F-nope"]))).toContain("F-nope");
+    const e = await rejected(lanes("x may matter.", ["F-nope"]));
+    expect(e).toContain("Unknown or unauthorized fact reference");
+    expect(e).not.toContain("F-nope");
     expect((await run(lanes("x may matter.", []))).state).toBe("rejected");
     expect((await run(lanes("x may matter.", Array(LIMITS.refs + 1).fill("F-revenue")))).state).toBe("rejected");
   });

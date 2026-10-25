@@ -22,7 +22,7 @@ export function metaStatus(env: MetaEnv): MetaStatus {
 export type MetaResult =
   | { state: "blocked"; reason: string; requestSent: false }
   | { state: "error"; reason: string; requestSent: boolean; usage?: Usage | undefined }
-  | { state: "rejected"; errors: string[]; requestSent: true; usage?: Usage | undefined }
+  | { state: "rejected"; errors: string[]; categories?: string[] | undefined; requestSent: true; usage?: Usage | undefined }
   // findings: verified, Athena-rendered on the server from authorized facts (no model text). output: unverified model lanes.
   | { state: "ok"; findings: VerifiedFinding[]; output: MetaOutput; requestSent: true; usage?: Usage | undefined; authorizedIds: string[] };
 export type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; reasoning_tokens?: number; visible_output_tokens?: number; finish_reason?: string; max_tokens_sent: number };
@@ -111,6 +111,9 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
 
   const all = SCENARIOS.find((s) => s.id === req.data.scenarioId)!.records;
   const v = validateOutput(choice.message.content, records, all);
-  if (!v.ok) return { state: "rejected", errors: v.errors, requestSent: true, usage };
+  if (!v.ok) {
+    console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
+    return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };
+  }
   return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
 }

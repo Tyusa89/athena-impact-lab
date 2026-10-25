@@ -215,7 +215,7 @@ describe("6. identity verification unavailable: fail closed", () => {
     expect(f).not.toHaveBeenCalled();
   });
   it("key/flag checks still come first and request validation errors are unchanged", async () => {
-    expect(await runMeta({}, { META_MODEL_API_KEY: "", META_MODEL_ENABLED: "true" }, reply(lane("x")) as never, runtimeFor("token-acme-analyst"))).toMatchObject({ state: "blocked", reason: expect.stringContaining("META_MODEL_API_KEY") });
+    expect(await runMeta({}, { META_MODEL_API_KEY: "", META_MODEL_ENABLED: "true" }, reply(lane("x")) as never, runtimeFor("token-acme-analyst"))).toMatchObject({ state: "blocked", reason: "Meta API server credential is not configured." });
     expect(await runMeta(claim("root"), READY, reply(lane("x")) as never)).toMatchObject({ state: "blocked", reason: "Invalid request: Unknown role" });
   });
 });

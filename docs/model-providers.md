@@ -6,7 +6,18 @@ The engine talks to a model only through `ModelProvider` (`src/lib/athena/meta/p
 ## Contract
 A provider is a **transport**. It receives a frozen `ModelRequest` (messages the engine built from *authorized* evidence only, the output
 cap, the JSON Schema) and a `ProviderCall` (`env`, the injected `fetch`, an abort `signal`), and returns a `ModelOutcome`: either
-`{kind:"completion", content, truncated, usage}` or `{kind:"failure", reason}`. It also reports `status(env)` and `blockedReason(env)`.
+`{kind:"completion", content, truncated, usage}` or `{kind:"failure", code, status?, errorName?}`. It also reports `status(env)` and `blockedCode(env)`.
+
+## Error boundary (C1)
+A provider never supplies prose for a user or a log. It selects from **closed sets** (`provider.ts`): failure codes `http_error | network_error |
+malformed_response | unavailable | unknown`, blocked codes `credential_missing | not_activated | unavailable`, error class names (`SAFE_ERROR_NAMES`)
+and stop reasons (`SAFE_FINISH_REASONS`), plus an HTTP status (an integer 100-599). `providerBoundary.ts` maps each to **fixed engine wording**
+(e.g. `"<label> returned HTTP 503 (not retried)."`); anything outside the sets becomes `unknown` / `unavailable` (a blocked answer that is not exactly
+`null` fails closed). Free-text fields (`reason`, `message`, stack, custom properties, an upstream body) are never read. A thrown error is reported by
+a known class name only. Static labels (`id`, `model`, `displayName`) are read before the request exists and validated against strict patterns, else
+replaced by a fixed fallback. Server diagnostics carry only the provider id, a category code and a status number.
+Residual: a deliberately malicious provider implementation is in-process code that holds the credential and could exfiltrate by other means; this boundary
+protects against upstream content, bugs and untrusted data flowing through a well-meaning provider.
 
 It never sees records, citations, tenants, identities or the evidence store. Nothing it returns is trusted: the engine reads only
 `content`, `truncated` and well-formed token counts, and validates the text from scratch (strict schema, numeral policy, semantic guards, leak

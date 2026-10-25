@@ -2,7 +2,7 @@
 // A new adapter proves it honours the neutral contract by supplying a factory that builds the provider over a MOCKED transport for each scenario.
 // No live API calls: the transport is always the fake the factory returns.
 import { describe, expect, it } from "vitest";
-import type { ModelOutcome, ModelProvider, ModelRequest, ProviderEnv } from "./provider";
+import { BLOCK_CODES, SAFE_ERROR_NAMES, FAILURE_CODES, type ModelProvider, type ModelRequest, type ProviderEnv } from "./provider";
 
 export type ContractScenario = "ok" | "http-error" | "malformed-body" | "no-content" | "truncated" | "network-error" | "hangs";
 export interface ContractHarness {
@@ -32,17 +32,18 @@ export function describeProviderContract(name: string, make: (scenario: Contract
     return { h, outcome };
   };
   describe(`provider contract: ${name}`, () => {
-    it("identifies itself", () => {
+    it("identifies itself with static labels that pass the engine's validation", () => {
       const { provider } = make("ok");
-      expect(provider.id).toMatch(/^[a-z0-9][a-z0-9-]*$/);
-      expect(provider.model.length).toBeGreaterThan(0);
+      expect(provider.id).toMatch(/^[a-z0-9][a-z0-9-]{0,31}$/);
+      expect(provider.model).toMatch(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/);
+      expect(provider.displayName).toMatch(/^[A-Za-z][A-Za-z0-9 .-]{0,31}$/);
     });
-    it("reports status and blocked reasons without ever returning the credential", () => {
+    it("reports status, and blocked categories from the closed set, without ever returning the credential", () => {
       const h = make("ok");
       expect(h.provider.status(h.env)).toEqual({ keyConfigured: true, ownerEnabled: true });
-      expect(h.provider.blockedReason(h.env)).toBeNull();
-      const none = h.provider.blockedReason({});
-      expect(typeof none).toBe("string");
+      expect(h.provider.blockedCode(h.env)).toBeNull();
+      const none = h.provider.blockedCode({});
+      expect(BLOCK_CODES as readonly unknown[]).toContain(none);
       expect(h.provider.status({})).toEqual({ keyConfigured: false, ownerEnabled: false });
       for (const s of h.secrets) expect(JSON.stringify([none, h.provider.status(h.env)])).not.toContain(s);
     });
@@ -68,14 +69,15 @@ export function describeProviderContract(name: string, make: (scenario: Contract
       const { outcome } = await run("truncated");
       expect(outcome).toMatchObject({ kind: "completion", truncated: true });
     });
-    it.each<ContractScenario>(["http-error", "malformed-body", "network-error"])("%s is a failure value (never thrown), tried once, and its reason leaks nothing", async (scenario) => {
+    it.each<ContractScenario>(["http-error", "malformed-body", "network-error"])("%s is a failure value (never thrown) carrying only a closed category and safe metadata, tried once", async (scenario) => {
       const { outcome, h } = await run(scenario);
       expect(outcome.kind).toBe("failure");
-      const reason = (outcome as Extract<ModelOutcome, { kind: "failure" }>).reason;
-      expect(typeof reason).toBe("string");
-      expect(reason.length).toBeGreaterThan(0);
-      expect(reason.length).toBeLessThan(300);
-      for (const s of h.secrets) expect(reason).not.toContain(s);
+      if (outcome.kind !== "failure") return;
+      expect(FAILURE_CODES as readonly unknown[]).toContain(outcome.code);
+      expect(Object.keys(outcome).every((k) => ["kind", "code", "status", "errorName"].includes(k))).toBe(true); // no free text field
+      if (outcome.status !== undefined) expect(Number.isInteger(outcome.status) && outcome.status >= 100 && outcome.status <= 599).toBe(true);
+      if (outcome.errorName !== undefined) expect(SAFE_ERROR_NAMES as readonly unknown[]).toContain(outcome.errorName);
+      for (const s of h.secrets) expect(JSON.stringify(outcome)).not.toContain(s);
       expect(h.transportCalls()).toBe(1); // no retry after a failure
     });
     it("honours the abort signal: a call that never answers ends once it is aborted", async () => {

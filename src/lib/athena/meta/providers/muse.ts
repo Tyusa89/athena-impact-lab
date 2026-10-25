@@ -11,7 +11,7 @@
 // Imports only the neutral provider contract and engine limits: no evidence, tenant, identity or catalog code.
 import { MAX_OUTPUT_TOKENS } from "../limits";
 import { OUTPUT_JSON_SCHEMA } from "../outputSchema";
-import type { ModelOutcome, ModelProvider, ModelRequest, ModelUsage, ProviderCall, ProviderEnv } from "../provider";
+import type { BlockCode, ModelOutcome, ModelProvider, ModelRequest, ModelUsage, ProviderCall, ProviderEnv } from "../provider";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
@@ -49,14 +49,15 @@ const keyOf = (env: ProviderEnv) => env["META_MODEL_API_KEY"];
 export const museSpark: ModelProvider = {
   id: "muse-spark",
   model: META_MODEL,
+  displayName: "Meta API",
   status(env) {
     const key = keyOf(env);
     return { keyConfigured: !!key && key.trim().length > 0, ownerEnabled: env["META_MODEL_ENABLED"] === "true" };
   },
-  blockedReason(env) {
+  blockedCode(env): BlockCode | null {
     const st = this.status(env);
-    if (!st.keyConfigured) return "META_MODEL_API_KEY is not configured on the server.";
-    if (!st.ownerEnabled) return "Owner activation flag META_MODEL_ENABLED is not 'true'.";
+    if (!st.keyConfigured) return "credential_missing";
+    if (!st.ownerEnabled) return "not_activated";
     return null;
   },
   async complete(request: ModelRequest, call: ProviderCall): Promise<ModelOutcome> {
@@ -73,14 +74,11 @@ export const museSpark: ModelProvider = {
       if (res.ok) raw = await res.text();
     } catch (e) {
       void res?.body?.cancel().catch(() => {});
-      return { kind: "failure", reason: `Network error (not retried): ${e instanceof Error ? e.name : "unknown"}` };
+      return { kind: "failure", code: "network_error", errorName: e instanceof Error ? e.name : "unknown" }; // the engine shows the name only if it is a known class
     }
-    if (!res.ok) {
-      console.error("Meta API error status", res.status);
-      return { kind: "failure", reason: `Meta API returned HTTP ${res.status} (not retried).` };
-    }
+    if (!res.ok) return { kind: "failure", code: "http_error", status: res.status }; // the status only; the body is never read or echoed
     let parsed: MuseBody;
-    try { parsed = JSON.parse(raw); } catch { return { kind: "failure", reason: "Response body is not JSON." }; }
+    try { parsed = JSON.parse(raw); } catch { return { kind: "failure", code: "malformed_response" }; }
     const choice = parsed.choices?.[0];
     const content = choice?.message?.content;
     return {

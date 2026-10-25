@@ -22,9 +22,9 @@ interface Spy { calls: { request: ModelRequest; call: ProviderCall }[] }
 /** A provider that is NOT Muse Spark: it never touches a transport and returns whatever the test says. */
 function fake(answer: (request: ModelRequest, call: ProviderCall) => unknown | Promise<unknown>, spy: Spy = { calls: [] }, over: Partial<ModelProvider> = {}): ModelProvider & Spy {
   return {
-    id: "fake-provider", model: "fake-model-1",
+    id: "fake-provider", model: "fake-model-1", displayName: "Fake Provider",
     status: () => ({ keyConfigured: true, ownerEnabled: true }),
-    blockedReason: () => null,
+    blockedCode: () => null,
     async complete(request, call) { spy.calls.push({ request, call }); return (await answer(request, call)) as ModelOutcome; },
     ...over, calls: spy.calls,
   };
@@ -58,10 +58,12 @@ describe("a second provider plugs in without touching the engine", () => {
     expect(metaStatus(READY).model).toBe("muse-spark-1.3"); // default stays Muse Spark
     expect(PROTOTYPE_RUNTIME.provider).toBe(museSpark);
   });
-  it("uses that provider's own readiness reasons, and sends nothing when it is not ready", async () => {
-    const p = fake(() => completion(goodOutput()), undefined, { blockedReason: () => "OTHER_PROVIDER_KEY is not configured." });
-    expect(await runMeta(req(), READY, noFetch, withProvider(p))).toEqual({ state: "blocked", reason: "OTHER_PROVIDER_KEY is not configured.", requestSent: false });
-    expect(p.calls).toHaveLength(0);
+  it("uses that provider's blocked category with engine-owned wording, and sends nothing when it is not ready", async () => {
+    for (const [code, text] of [["credential_missing", "Fake Provider server credential is not configured."], ["not_activated", "Fake Provider has not been activated by the owner."], ["unavailable", "Fake Provider is unavailable."]] as const) {
+      const p = fake(() => completion(goodOutput()), undefined, { blockedCode: () => code });
+      expect(await runMeta(req(), READY, noFetch, withProvider(p))).toEqual({ state: "blocked", reason: text, requestSent: false });
+      expect(p.calls).toHaveLength(0);
+    }
   });
 });
 
@@ -186,7 +188,7 @@ describe("a provider cannot generate verified facts, citations or authority", ()
 
 describe("budgets, one request, deadline and no retry hold for every provider", () => {
   it.each([
-    ["a failure", () => ({ kind: "failure", reason: "boom" })],
+    ["a failure", () => ({ kind: "failure", code: "unknown" })],
     ["a rejected completion", () => completion("not json")],
     ["a truncated completion", () => completion("{", { truncated: true })],
     ["a thrown error", () => { throw new Error("kaboom"); }],
@@ -225,16 +227,12 @@ describe("budgets, one request, deadline and no retry hold for every provider", 
     await runMeta(req(), READY, noFetch, withProvider(p));
     expect(p.calls[0]!.call.signal.aborted).toBe(false);
   });
-  it("a provider that throws is reported by error type only: its message never reaches the user or the log", async () => {
+  it("a provider that throws is reported by a known error class only: its message never reaches the user or the log", async () => {
     const errSpy = vi.spyOn(console, "error"), infoSpy = vi.spyOn(console, "info");
-    const p = fake(() => { throw Object.assign(new Error("api key sk-live-123 and prompt text"), { name: "ProviderBoom" }); });
+    const p = fake(() => { throw Object.assign(new TypeError("api key sk-live-123 and prompt text"), { name: "ProviderBoom" }); });
     const res = await runMeta(req(), READY, noFetch, withProvider(p));
-    expect(res).toEqual({ state: "error", reason: "Provider error (not retried): ProviderBoom", requestSent: true });
-    expect(JSON.stringify([res, ...errSpy.mock.calls, ...infoSpy.mock.calls])).not.toMatch(/sk-live|prompt text/);
-  });
-  it("a failure value's reason is passed through, trimmed to a safe length", async () => {
-    const res = await runMeta(req(), READY, noFetch, withProvider(fake(() => ({ kind: "failure", reason: "x".repeat(5000) }))));
-    expect(res.state === "error" && res.reason.length).toBe(300);
+    expect(res).toEqual({ state: "error", reason: "Provider error (not retried): unknown", requestSent: true });
+    expect(JSON.stringify([res, ...errSpy.mock.calls, ...infoSpy.mock.calls])).not.toMatch(/sk-live|prompt text|ProviderBoom/);
   });
   it.each([["null", null], ["a string", "ok"], ["an unknown kind", { kind: "weird" }], ["a failure with no reason", { kind: "failure" }]])("an invalid provider result (%s) is an error, not a crash", async (_n, answer) => {
     const res = await runMeta(req(), READY, noFetch, withProvider(fake(() => answer)));

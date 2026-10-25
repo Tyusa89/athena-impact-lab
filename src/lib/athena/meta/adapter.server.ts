@@ -11,6 +11,7 @@ import type { VerifiedFinding } from "./findings";
 import { MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_MS } from "./limits";
 import { buildVerifiedFacts, uncoveredRecordIds } from "./numericGrounding";
 import { OUTPUT_JSON_SCHEMA } from "./outputSchema";
+import { blockCodeOf, cleanUsage, describeBlock, describeFailure, safeFailure, safeId, safeLabel, safeModel, safeStatus, safeThrownName } from "./providerBoundary";
 import type { ModelOutcome, ModelProvider, ModelRequest, ModelUsage, ProviderEnv } from "./provider";
 import { museSpark } from "./providers/muse";
 
@@ -20,8 +21,8 @@ export type { MuseEnv as MetaEnv } from "./providers/muse";
 export type MetaStatus = { keyConfigured: boolean; ownerEnabled: boolean; ready: boolean; model: string; maxInputTokens: number; maxOutputTokens: number };
 
 export function metaStatus(env: ProviderEnv, provider: ModelProvider = museSpark): MetaStatus {
-  const { keyConfigured, ownerEnabled } = provider.status(env);
-  return { keyConfigured, ownerEnabled, ready: keyConfigured && ownerEnabled, model: provider.model, maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: MAX_OUTPUT_TOKENS };
+  const { keyConfigured, ownerEnabled } = safeStatus(provider, env);
+  return { keyConfigured, ownerEnabled, ready: keyConfigured && ownerEnabled, model: safeModel(provider), maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: MAX_OUTPUT_TOKENS };
 }
 
 // Kept for existing imports; the request format and response parsing now belong to the Muse Spark adapter.
@@ -69,21 +70,13 @@ export interface EngineRuntime {
 }
 export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, identity: demoIdentity, allowSimulatedIdentity: true, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION, provider: museSpark };
 
-const num = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0;
-/** Copy only the known, well-formed accounting fields from a provider's usage; the sent cap is the engine's, not the provider's claim. */
-function cleanUsage(u: unknown): ModelUsage {
-  const src = (typeof u === "object" && u !== null ? u : {}) as Record<string, unknown>;
-  const out: ModelUsage = { max_tokens_sent: MAX_OUTPUT_TOKENS };
-  for (const k of ["prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens", "visible_output_tokens"] as const) if (num(src[k])) out[k] = src[k] as number;
-  if (typeof src["finish_reason"] === "string" && src["finish_reason"].length <= 64) out.finish_reason = src["finish_reason"];
-  return out;
-}
 const deepFreeze = <T>(x: T): T => { if (typeof x === "object" && x !== null && !Object.isFrozen(x)) { Object.freeze(x); for (const v of Object.values(x)) deepFreeze(v); } return x; };
 
 export async function runMeta(input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: EngineRuntime = PROTOTYPE_RUNTIME): Promise<MetaResult> {
   const provider = runtime.provider;
-  const notReady = provider.blockedReason(env); // missing credential or owner activation off: nothing else runs
-  if (notReady) return { state: "blocked", reason: notReady, requestSent: false };
+  const label = safeLabel(provider); // static, validated, and read before any request exists
+  const notReady = blockCodeOf(provider, env); // missing credential, owner activation off, or anything unexpected: nothing else runs
+  if (notReady) return { state: "blocked", reason: describeBlock(notReady, label), requestSent: false };
   const req = runtime.resolve(input);
   if (!req.ok) return { state: "blocked", reason: req.reason, requestSent: false };
 
@@ -119,14 +112,20 @@ export async function runMeta(input: unknown, env: ProviderEnv, fetchImpl: typeo
     outcome = await Promise.race([provider.complete(request, { env, fetch: fetchImpl, signal: ctrl.signal }), deadline]);
   } catch (e) {
     const timedOut = ctrl.signal.aborted;
-    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Provider error (not retried): ${e instanceof Error ? e.name : "unknown"}`, requestSent: true };
+    if (!timedOut) console.error("Model provider error", JSON.stringify({ provider: safeId(provider), code: "thrown" })); // category only
+    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Provider error (not retried): ${safeThrownName(e)}`, requestSent: true };
   } finally { clearTimeout(timer); }
 
   // Nothing a provider returns is trusted: only well-formed text, token counts and a truncation flag are read; the rest is ignored.
   if (typeof outcome !== "object" || outcome === null) return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
-  if (outcome.kind === "failure") return { state: "error", reason: typeof outcome.reason === "string" ? outcome.reason.slice(0, 300) : "Provider request failed (not retried).", requestSent: true };
+  if (outcome.kind === "failure") {
+    // The client sees fixed engine wording for a CLOSED category (plus an HTTP status or known error class name). Free text from the provider is never read.
+    const f = safeFailure(outcome);
+    console.error("Model provider error", JSON.stringify({ provider: safeId(provider), code: f.code, ...(f.status !== undefined ? { status: f.status } : {}) })); // safe codes and numbers only
+    return { state: "error", reason: describeFailure(f, label), requestSent: true };
+  }
   if (outcome.kind !== "completion") return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
-  const usage = cleanUsage(outcome.usage);
+  const usage = cleanUsage(outcome.usage, MAX_OUTPUT_TOKENS);
   // Redacted diagnostic log: token accounting only, never key, prompt or content.
   console.info("Meta usage", JSON.stringify(usage));
   if ((usage.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage };

@@ -90,40 +90,38 @@ describe("muse-spark: response parsing", () => {
     for (const [reason, want] of [["length", true], ["stop", false], ["content_filter", false], [undefined, false]] as const)
       expect(await complete(new Response(JSON.stringify({ choices: [{ message: { content: "x" }, finish_reason: reason }] }), { status: 200 }))).toMatchObject({ truncated: want });
   });
-  it("HTTP errors name only the status; the body is never echoed, and only the status is logged", async () => {
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("HTTP errors report a category and the status only; the body is never read, echoed or logged by the adapter", async () => {
+    const spies = [vi.spyOn(console, "error"), vi.spyOn(console, "info"), vi.spyOn(console, "log"), vi.spyOn(console, "warn")].map((s) => s.mockImplementation(() => {}));
     const o = await complete(new Response(`secret ${KEY}`, { status: 429 }));
-    expect(o).toEqual({ kind: "failure", reason: "Meta API returned HTTP 429 (not retried)." });
-    expect(JSON.stringify(errSpy.mock.calls)).not.toContain(KEY);
-    expect(errSpy).toHaveBeenCalledWith("Meta API error status", 429);
-    errSpy.mockRestore();
+    expect(o).toEqual({ kind: "failure", code: "http_error", status: 429 });
+    for (const s of spies) expect(s).not.toHaveBeenCalled(); // diagnostics are the engine's, and carry codes only
   });
-  it("a body that cannot be read, or a transport that throws, is a failure naming only the error type", async () => {
-    expect(await complete(() => Promise.reject(Object.assign(new Error(KEY), { name: "AbortError" })))).toEqual({ kind: "failure", reason: "Network error (not retried): AbortError" });
-    expect(await complete(() => Promise.reject("weird"))).toEqual({ kind: "failure", reason: "Network error (not retried): unknown" });
+  it("a body that cannot be read, or a transport that throws, is a network_error naming only the error type", async () => {
+    expect(await complete(() => Promise.reject(Object.assign(new Error(KEY), { name: "AbortError" })))).toEqual({ kind: "failure", code: "network_error", errorName: "AbortError" });
+    expect(await complete(() => Promise.reject("weird"))).toEqual({ kind: "failure", code: "network_error", errorName: "unknown" });
     const broken = new Response(new ReadableStream({ start(c) { c.error(new Error(KEY)); } }), { status: 200 });
     const o = await complete(broken);
     expect(o.kind).toBe("failure");
     expect(JSON.stringify(o)).not.toContain(KEY);
   });
-  it("malformed JSON is a failure with a fixed message", async () => {
-    expect(await complete(new Response("{nope", { status: 200 }))).toEqual({ kind: "failure", reason: "Response body is not JSON." });
+  it("malformed JSON is a malformed_response failure", async () => {
+    expect(await complete(new Response("{nope", { status: 200 }))).toEqual({ kind: "failure", code: "malformed_response" });
   });
 });
 
 describe("muse-spark: configuration", () => {
   it.each([
     [{ META_MODEL_API_KEY: KEY, META_MODEL_ENABLED: "true" }, { keyConfigured: true, ownerEnabled: true }, null],
-    [{ META_MODEL_API_KEY: KEY }, { keyConfigured: true, ownerEnabled: false }, "Owner activation flag META_MODEL_ENABLED is not 'true'."],
-    [{ META_MODEL_API_KEY: KEY, META_MODEL_ENABLED: "TRUE" }, { keyConfigured: true, ownerEnabled: false }, "Owner activation flag META_MODEL_ENABLED is not 'true'."],
-    [{ META_MODEL_API_KEY: "   ", META_MODEL_ENABLED: "true" }, { keyConfigured: false, ownerEnabled: true }, "META_MODEL_API_KEY is not configured on the server."],
-    [{ META_MODEL_ENABLED: "true" }, { keyConfigured: false, ownerEnabled: true }, "META_MODEL_API_KEY is not configured on the server."],
-    [{}, { keyConfigured: false, ownerEnabled: false }, "META_MODEL_API_KEY is not configured on the server."],
+    [{ META_MODEL_API_KEY: KEY }, { keyConfigured: true, ownerEnabled: false }, "not_activated"],
+    [{ META_MODEL_API_KEY: KEY, META_MODEL_ENABLED: "TRUE" }, { keyConfigured: true, ownerEnabled: false }, "not_activated"],
+    [{ META_MODEL_API_KEY: "   ", META_MODEL_ENABLED: "true" }, { keyConfigured: false, ownerEnabled: true }, "credential_missing"],
+    [{ META_MODEL_ENABLED: "true" }, { keyConfigured: false, ownerEnabled: true }, "credential_missing"],
+    [{}, { keyConfigured: false, ownerEnabled: false }, "credential_missing"],
   ] as const)("env %j", (env, status, blocked) => {
     expect(museSpark.status(env)).toEqual(status);
-    expect(museSpark.blockedReason(env)).toBe(blocked);
+    expect(museSpark.blockedCode(env)).toBe(blocked);
   });
   it("identifies as the default Muse Spark provider", () => {
-    expect([museSpark.id, museSpark.model]).toEqual(["muse-spark", "muse-spark-1.3"]);
+    expect([museSpark.id, museSpark.model, museSpark.displayName]).toEqual(["muse-spark", "muse-spark-1.3", "Meta API"]);
   });
 });

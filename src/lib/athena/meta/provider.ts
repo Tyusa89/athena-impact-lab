@@ -47,8 +47,22 @@ export interface ProviderCall {
 }
 
 /**
- * What a provider returns. Failures are values, not exceptions, and `reason` is shown to the user, so it must never contain a
- * credential, a prompt or any response text.
+ * Closed sets of SAFE failure and blocked categories. A provider reports a category, never prose: the engine maps each category to a fixed
+ * message it owns, so nothing a provider (or the upstream service behind it) says can reach a client or a log. Anything outside these sets
+ * is treated as `unknown` / `unavailable`.
+ */
+export const FAILURE_CODES = ["http_error", "network_error", "malformed_response", "unavailable", "unknown"] as const;
+export type FailureCode = (typeof FAILURE_CODES)[number];
+export const BLOCK_CODES = ["credential_missing", "not_activated", "unavailable"] as const;
+export type BlockCode = (typeof BLOCK_CODES)[number];
+/** JavaScript error class names a provider may report as non-sensitive metadata on a network error. Others are shown as "unknown". */
+export const SAFE_ERROR_NAMES = ["AbortError", "TimeoutError", "NetworkError", "TypeError", "RangeError", "SyntaxError", "Error"] as const;
+/** Stop reasons the engine will pass through in usage accounting. Others are shown as "other". */
+export const SAFE_FINISH_REASONS = ["stop", "length", "content_filter", "tool_calls", "function_call", "end_turn", "max_tokens", "stop_sequence", "refusal", "error"] as const;
+
+/**
+ * What a provider returns. Failures are values, not exceptions, and carry ONLY a category and optional non-sensitive metadata: an HTTP status
+ * (an integer 100-599) and an error class name from `SAFE_ERROR_NAMES`. Any other field, including free text such as `reason` or `message`, is ignored.
  */
 export type ModelOutcome =
   | {
@@ -59,7 +73,7 @@ export type ModelOutcome =
       truncated: boolean;
       usage: ModelUsage;
     }
-  | { kind: "failure"; reason: string };
+  | { kind: "failure"; code: FailureCode; status?: number; errorName?: string };
 
 export interface ProviderStatus {
   keyConfigured: boolean;
@@ -69,12 +83,14 @@ export interface ProviderStatus {
 export interface ModelProvider {
   /** Stable machine id, e.g. "muse-spark". */
   readonly id: string;
-  /** Human-readable model name shown in the UI. */
+  /** Human-readable model name shown in the UI. Static; validated by the engine (letters, digits and `. _ : / -`, at most 64 characters). */
   readonly model: string;
+  /** Static label used in fixed engine messages, e.g. "Meta API". Validated by the engine (letters, digits, space, `.` and `-`, at most 32 characters). */
+  readonly displayName: string;
   /** Whether the server holds the provider's credential and the owner has activated the provider. Never returns the credential. */
   status(env: ProviderEnv): ProviderStatus;
-  /** Why a request cannot be sent right now (missing credential, owner activation off), or null when it can. Shown to the user. */
-  blockedReason(env: ProviderEnv): string | null;
+  /** Why a request cannot be sent right now, as a category from `BLOCK_CODES`, or exactly `null` when it can. The engine owns the wording. */
+  blockedCode(env: ProviderEnv): BlockCode | null;
   /** Make exactly ONE request. Must not retry. */
   complete(request: ModelRequest, call: ProviderCall): Promise<ModelOutcome>;
 }

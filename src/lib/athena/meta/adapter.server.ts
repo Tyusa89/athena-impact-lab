@@ -37,8 +37,8 @@ export type MetaResult =
 export type Usage = ModelUsage;
 
 /** Facts-only prompting is allowed only when every authorized record is represented by a verified fact. Otherwise nothing is sent. */
-export function factsBlockReason(records: readonly EvidenceRecord[]): string | null {
-  const facts = buildVerifiedFacts(records);
+export function factsBlockReason(records: readonly EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): string | null {
+  const facts = buildVerifiedFacts(records, ctx);
   const uncovered = uncoveredRecordIds(records, facts);
   if (facts.length === 0) return "Authorized evidence yields no verified facts; nothing sent.";
   if (uncovered.length > 0) return `Authorized evidence cannot be fully represented as verified facts (${uncovered.length} record(s) unpaired); nothing sent.`;
@@ -48,9 +48,9 @@ export function factsBlockReason(records: readonly EvidenceRecord[]): string | n
 /** Everything the live path needs from the deployment: how a request becomes a trusted context, which evidence exists, who may see it,
  * and the business vocabulary. The default is the prototype's; a real deployment supplies its own (server-side) implementations. */
 /** `factsBlockReason` for the live path: refuses evidence that did not come from `authorizeEvidence`. */
-export function authorizedFactsBlockReason(records: AuthorizedEvidence<PrototypeEvidence>): string | null {
+export function authorizedFactsBlockReason(records: AuthorizedEvidence<PrototypeEvidence>, ctx: AnalysisContext = PROTOTYPE_CONTEXT): string | null {
   assertAuthorized(records);
-  return factsBlockReason(records);
+  return factsBlockReason(records, ctx);
 }
 
 export interface EngineRuntime {
@@ -91,7 +91,7 @@ export async function runMeta(input: unknown, env: ProviderEnv, fetchImpl: typeo
     return { state: "blocked", reason: "Authorization failed; nothing sent.", requestSent: false };
   }
   if (records.length === 0) return { state: "blocked", reason: "No records in authorized workspaces; nothing to send.", requestSent: false };
-  const unfit = authorizedFactsBlockReason(records);
+  const unfit = authorizedFactsBlockReason(records, runtime.analysis); // the runtime's own catalog and periods, not the prototype's
   if (unfit) return { state: "blocked", reason: unfit, requestSent: false };
   const messages = prepareMessages(runtime.question, records, runtime.analysis);
   const est = estimateTokens(JSON.stringify(messages));

@@ -1,0 +1,17 @@
+Record,Measure,Dept,Quarter,Amount,Unit,System,Comment
+OPS-MKT-001-Q2,Marketing Leads,Marketing,Q2 2026,4200,leads,SYN-CRM Campaign Export,
+OPS-MKT-001-Q3,Marketing Leads,Marketing,Q3 2026,6300,leads,SYN-CRM Campaign Export,"Paid social share rose 22% → 51%, per the ""Ads"" ledger"
+OPS-MKT-002-Q2,MQL Rate,Marketing,Q2 2026,34,pct,SYN-CRM Lead Scoring,
+OPS-MKT-002-Q3,MQL Rate,Marketing,Q3 2026,21,pct,SYN-CRM Lead Scoring,
+OPS-MKT-003-Q2,CAC,Marketing,Q2 2026,118,usd,SYN-Ads Spend Ledger,
+OPS-MKT-003-Q3,CAC,Marketing,Q3 2026,141,usd,SYN-Ads Spend Ledger,
+OPS-SAL-001-Q2,Win Rate,Sales,Q2 2026,9.5,pct,SYN-Pipeline Snapshot,
+OPS-SAL-001-Q3,Win Rate,Sales,Q3 2026,5.4,pct,SYN-Pipeline Snapshot,
+OPS-SAL-002-Q2,Closed Won Deals,Sales,Q2 2026,399,deals,SYN-Pipeline Snapshot,
+OPS-SAL-002-Q3,Closed Won Deals,Sales,Q3 2026,340,deals,SYN-Pipeline Snapshot,
+OPS-OPS-001-Q2,Days to Fulfil,Operations,Q2 2026,3.1,days,SYN-WMS Shipment Log,
+OPS-OPS-001-Q3,Days to Fulfil,Operations,Q3 2026,7.8,days,SYN-WMS Shipment Log,Supplier delay on one SKU family
+OPS-OPS-002-Q2,Backorders %,Operations,Q2 2026,4,pct,SYN-WMS Inventory Report,
+OPS-OPS-002-Q3,Backorders %,Operations,Q3 2026,17,pct,SYN-WMS Inventory Report,
+OPS-FIN-001-Q2,Revenue (GL),Finance,Q2 2026,1240000,usd,SYN-GL Revenue Summary,
+OPS-FIN-001-Q3,Revenue (GL),Finance,Q3 2026,1018000,usd,SYN-GL Revenue Summary,

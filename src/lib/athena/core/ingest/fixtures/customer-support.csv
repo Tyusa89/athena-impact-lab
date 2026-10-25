@@ -1,0 +1,9 @@
+area,metric,period,value,unit,note
+Support,tickets_opened,Jan 2027,1000,tickets,
+Support,tickets_opened,Feb 2027,1200,tickets,
+Support,first_response_hours,Jan 2027,5,hours,
+Support,first_response_hours,Feb 2027,5.1,hours,
+Support,resolution_hours,Jan 2027,26,hours,
+Support,resolution_hours,Feb 2027,34.5,hours,Backlog after the pricing change
+CustomerExperience,csat,Jan 2027,92,%,
+CustomerExperience,csat,Feb 2027,88,%,

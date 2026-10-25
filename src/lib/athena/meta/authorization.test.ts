@@ -325,10 +325,10 @@ function authorizeEvidenceFor2(candidates: PrototypeEvidence[]) {
 describe("structure: the live path cannot reach raw evidence", () => {
   const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, " ");
   const adapter = strip(readFileSync("src/lib/athena/meta/runtime.ts", "utf8"));
-  const start = adapter.indexOf("export async function runAnalysis");
+  const start = adapter.indexOf("export async function authorizeRequest");
   expect(start).toBeGreaterThan(0);
   const runMetaBody = adapter.slice(start);
-  it("the pipeline (runAnalysis) uses only the authorization-checked stages", () => {
+  it("the pipeline (authorizeRequest + runAnalysis) uses only the authorization-checked stages", () => {
     for (const raw of ["buildMessages(", "buildVerifiedFacts(", "validateOutput(", "computeFacts(", "renderFindings(", "factsBlockReason(", "filterVisible(", "SCENARIOS", "ROLES", "workspacesForRole", "authorizedRecords("])
       expect(runMetaBody, raw).not.toContain(raw);
     for (const checked of ["authorizeEvidence(", "prepareMessages(", "validateAuthorizedOutput(", "authorizedFactsBlockReason("]) expect(runMetaBody, checked).toContain(checked);

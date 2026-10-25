@@ -8,6 +8,7 @@ import type { Evidence, EvidenceLike } from "../core/evidence";
 import type { AnalysisContext } from "../core/facts";
 import { DEFAULT_PROMPT_SUBJECT, estimateTokens, prepareMessages, validateAuthorizedOutput, type MetaOutput } from "./analysis";
 import { buildVerifiedFacts, uncoveredRecordIds } from "./grounding";
+import { buildImpactMap, type ImpactMap, type ImpactOptions, type RelationshipModel } from "./impact";
 import { MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_MS } from "./limits";
 import { OUTPUT_JSON_SCHEMA } from "./outputSchema";
 import { blockCodeOf, cleanUsage, describeBlock, describeFailure, safeFailure, safeId, safeLabel, safeModel, safeStatus, safeThrownName } from "./providerBoundary";
@@ -72,18 +73,17 @@ export type ResolvedRequest =
   | { ok: true; credential: unknown; dataset: string; /** An UNTRUSTED analysis question from the request, if it carried one. */ question?: unknown }
   | { ok: false; reason: string };
 
-export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: EngineRuntime): Promise<MetaResult> {
-  const provider = runtime.provider;
-  const label = safeLabel(provider); // static, validated, and read before any request exists
-  const notReady = blockCodeOf(provider, env); // missing credential, owner activation off, or anything unexpected: nothing else runs
-  if (notReady) return { state: "blocked", reason: describeBlock(notReady, label), requestSent: false };
+/** Everything up to (but not including) building a prompt: resolve the request, validate the untrusted question, authenticate, authorize, and require full fact coverage.
+ * Shared by the model path (`runAnalysis`) and the deterministic path (`runImpactAnalysis`); either way nothing proceeds without authorized evidence. */
+export type Prepared<E extends Evidence = Evidence> = { ok: true; records: AuthorizedEvidence<E>; withheld: readonly E[]; question: string } | { ok: false; reason: string };
+export async function authorizeRequest(input: unknown, runtime: Pick<EngineRuntime, "resolve" | "identity" | "allowSimulatedIdentity" | "store" | "policy" | "analysis" | "question">): Promise<Prepared> {
   const req = runtime.resolve(input);
-  if (!req.ok) return { state: "blocked", reason: req.reason, requestSent: false };
+  if (!req.ok) return { ok: false, reason: req.reason };
   // The question is untrusted input: validated before any evidence is touched, and never echoed back. Absent => the runtime's default.
   let question = runtime.question;
   if (req.question !== undefined) {
     const q = validateQuestion(req.question);
-    if (!q.ok) return { state: "blocked", reason: `Invalid analysis question (${q.code}).`, requestSent: false };
+    if (!q.ok) return { ok: false, reason: `Invalid analysis question (${q.code}).` };
     question = q.question;
   }
 
@@ -95,11 +95,22 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
     ({ authorized: records, withheld } = authorizeEvidence(runtime.identity, ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
   } catch (e) {
     if (!(e instanceof AuthorizationError)) console.error("Evidence store error"); // category only: never the message, ids or labels
-    return { state: "blocked", reason: "Authorization failed; nothing sent.", requestSent: false };
+    return { ok: false, reason: "Authorization failed; nothing sent." };
   }
-  if (records.length === 0) return { state: "blocked", reason: "No records in authorized workspaces; nothing to send.", requestSent: false };
+  if (records.length === 0) return { ok: false, reason: "No records in authorized workspaces; nothing to send." };
   const unfit = authorizedFactsBlockReason(records, runtime.analysis); // the runtime's own catalog and periods, not the prototype's
-  if (unfit) return { state: "blocked", reason: unfit, requestSent: false };
+  if (unfit) return { ok: false, reason: unfit };
+  return { ok: true, records, withheld, question };
+}
+
+export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: EngineRuntime): Promise<MetaResult> {
+  const provider = runtime.provider;
+  const label = safeLabel(provider); // static, validated, and read before any request exists
+  const notReady = blockCodeOf(provider, env); // missing credential, owner activation off, or anything unexpected: nothing else runs
+  if (notReady) return { state: "blocked", reason: describeBlock(notReady, label), requestSent: false };
+  const prep = await authorizeRequest(input, runtime);
+  if (!prep.ok) return { state: "blocked", reason: prep.reason, requestSent: false };
+  const { records, withheld, question } = prep;
   let messages;
   try {
     messages = prepareMessages(question, records, runtime.analysis, runtime.promptSubject ?? DEFAULT_PROMPT_SUBJECT);
@@ -150,4 +161,21 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
     return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };
   }
   return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
+}
+
+export type ImpactResult = { state: "ok"; impact: ImpactMap; authorizedIds: string[] } | { state: "blocked"; reason: string };
+/**
+ * The deterministic path: the same resolve -> validate question -> authenticate -> authorize -> full-coverage steps as `runAnalysis`, then a Business Impact Map built
+ * from authorized facts and the operator's relationship model. NO model provider is involved: nothing is sent anywhere, no key is needed, and the result is a pure
+ * function of the authorized evidence, the question and the model. Fails closed with the same fixed reasons.
+ */
+export async function runImpactAnalysis(input: unknown, runtime: Pick<EngineRuntime, "resolve" | "identity" | "allowSimulatedIdentity" | "store" | "policy" | "analysis" | "question">, model: RelationshipModel, opts: Pick<ImpactOptions, "provenance"> = {}): Promise<ImpactResult> {
+  const prep = await authorizeRequest(input, runtime);
+  if (!prep.ok) return { state: "blocked", reason: prep.reason };
+  try {
+    const impact = buildImpactMap(prep.records, runtime.analysis, model, { question: prep.question, ...(opts.provenance ? { provenance: opts.provenance } : {}) });
+    return { state: "ok", impact, authorizedIds: prep.records.map((r) => r.id) };
+  } catch {
+    return { state: "blocked", reason: "Engine configuration error; nothing computed." }; // an invalid catalog or relationship model: fail closed, say nothing about it
+  }
 }

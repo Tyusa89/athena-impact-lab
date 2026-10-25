@@ -83,6 +83,18 @@ function findEntities(text: string, catalog: Catalog): Entity[] {
   return out.sort((a, b) => a.start - b.start);
 }
 
+/** Catalog metrics and domains mentioned in free text (whole-word alias matches, longest phrase first). Used to focus a deterministic analysis on what a question
+ * is about. It selects among things the caller is already authorized for; it never reaches evidence itself. */
+export function mentionedIn(text: string, catalog: Catalog): { metrics: string[]; domains: string[] } {
+  assertCatalog(catalog);
+  const metrics: string[] = [], domains: string[] = [];
+  for (const e of findEntities(semanticText(text), catalog)) {
+    const list = e.kind === "metric" ? metrics : domains;
+    if (!list.includes(e.key)) list.push(e.key);
+  }
+  return { metrics, domains };
+}
+
 // ------------------------------------------------------------------ directional words
 type Cls = "iv" | "tv" | "ipart" | "tpart" | "noun" | "hom" | "basev" | "adj" | "flat";
 interface W { cls: Cls; dir?: Dir; val?: "good" | "bad" }

@@ -5,6 +5,8 @@ import type { AuthorizedEvidence } from "../core/access";
 import type { Evidence, EvidenceLike } from "../core/evidence";
 import type { AnalysisContext } from "../core/facts";
 import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
+import { BUSINESS_OPS_MODEL } from "../impactModels";
+import type { RelationshipModel } from "./impact";
 import { demoAccessPolicy, demoEvidenceStore, demoIdentity, resolveDemoRequest } from "../prototypeAdapter";
 import { museSpark } from "./providers/muse";
 import * as rt from "./runtime";
@@ -26,3 +28,6 @@ export const PROTOTYPE_RUNTIME: rt.EngineRuntime = {
 };
 /** The prototype's entry point: the generic pipeline over the demo runtime by default. */
 export const runMeta = (input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: rt.EngineRuntime = PROTOTYPE_RUNTIME) => rt.runAnalysis(input, env, fetchImpl, runtime);
+
+/** The prototype's deterministic Business Impact Map (no model, no key): the generic `runImpactAnalysis` over the demo runtime and the business-operations model. */
+export const runPrototypeImpact = (input: unknown, runtime: rt.EngineRuntime = PROTOTYPE_RUNTIME, model: RelationshipModel = BUSINESS_OPS_MODEL) => rt.runImpactAnalysis(input, runtime, model);

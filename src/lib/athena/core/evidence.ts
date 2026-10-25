@@ -21,3 +21,11 @@ export interface Evidence extends CoreRecord {
   readonly unit: string;
   readonly note?: string | undefined;
 }
+
+/** What the analysis pipeline reads from a record: identity, provenance, metric, domain, period and value. `tenantId` is optional here so that code
+ * which only validates or describes records need not care; every record that reaches the model path is an `Evidence` (tenant required) that came
+ * from `authorizeEvidence`. Any `Evidence` is an `EvidenceLike`. */
+export interface EvidenceLike extends CoreRecord {
+  readonly source: string;
+  readonly tenantId?: string | undefined;
+}

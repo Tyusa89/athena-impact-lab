@@ -256,12 +256,17 @@ describe("budgets, one request, deadline and no retry hold for every provider", 
 
 describe("structure: the engine is provider-neutral", () => {
   const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, " ");
-  it("adapter.server.ts has no Muse-specific request, response or configuration code; the default provider is chosen in one place", () => {
-    const src = strip(readFileSync("src/lib/athena/meta/adapter.server.ts", "utf8"));
-    for (const muse of ["api.meta.ai", "Bearer", "response_format", "choices", "finish_reason ===", "reasoning_effort", "META_ENDPOINT", "META_MODEL_API_KEY", "META_MODEL_ENABLED", "Meta API returned", "completion_tokens_details"]) expect(src, muse).not.toContain(muse);
-    expect(readFileSync("src/lib/athena/meta/adapter.server.ts", "utf8").split("\n").filter((l) => /^(import|export) .*providers\/muse/.test(l))).toHaveLength(3); // MetaEnv alias, buildBody/readUsage re-exports, default provider
-    expect(src.match(/museSpark/g)!.length).toBeGreaterThan(0);
-    expect(src.slice(src.indexOf("export async function runMeta"))).not.toContain("museSpark");
+  it("the pipeline (runtime.ts) has no Muse-specific request, response or configuration code and imports no concrete provider", () => {
+    const raw = readFileSync("src/lib/athena/meta/runtime.ts", "utf8");
+    const src = strip(raw);
+    expect(src.indexOf("export async function runAnalysis")).toBeGreaterThan(0);
+    for (const muse of ["api.meta.ai", "Bearer", "response_format", "choices", "finish_reason ===", "reasoning_effort", "META_ENDPOINT", "META_MODEL_API_KEY", "META_MODEL_ENABLED", "Meta API returned", "completion_tokens_details", "museSpark", "providers/muse"]) expect(src, muse).not.toContain(muse);
+  });
+  it("adapter.server.ts is the one place the prototype and the default provider are chosen", () => {
+    const raw = readFileSync("src/lib/athena/meta/adapter.server.ts", "utf8");
+    expect(raw.split("\n").filter((l) => /^(import|export) .*providers\/muse/.test(l))).toHaveLength(3); // MetaEnv alias, buildBody/readUsage re-exports, the default provider
+    expect(raw.match(/provider: museSpark/g)).toHaveLength(1);
+    expect(raw.match(/museSpark/g)).toHaveLength(3); // the import, the default of metaStatus, and the prototype runtime: nowhere else
   });
   it("contract.ts only re-exports the Muse constants for compatibility and does not use them", () => {
     const src = strip(readFileSync("src/lib/athena/meta/contract.ts", "utf8"));

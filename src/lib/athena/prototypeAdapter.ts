@@ -11,6 +11,7 @@ import { authorizeEvidence, type AccessPolicy, type AuthorizationResult, type Ev
 import { createIdentityBoundary, type IdentityVerifier } from "./core/identity";
 import type { Evidence } from "./core/evidence";
 import { DEMO_TENANT_ID, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "./data";
+import type { ResolvedRequest } from "./meta/runtime";
 
 /** A prototype record that carries the tenant and so satisfies the neutral `Evidence` interface. */
 export type PrototypeEvidence = EvidenceRecord & Evidence;
@@ -59,6 +60,8 @@ export const RequestSchema = z.object({
   // Only an allowlisted role id is accepted; any client workspaces/records/other fields are stripped by zod.
   roleId: z.string().refine((r) => Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, r), "Unknown role"),
   ownerConfirmed: z.literal(true),
+  // An optional analysis question. UNTRUSTED: carried through unread; the engine validates it (meta/question.ts) before use.
+  question: z.unknown().optional(),
 });
 export type MetaRequest = z.infer<typeof RequestSchema>;
 
@@ -78,14 +81,14 @@ export const simulatedDemoVerifier: IdentityVerifier = {
 /** The boundary built from the demo verifier. Held by the demo runtime; contexts it produces are "simulated" and accepted only by consumers holding it. */
 export const demoIdentity = createIdentityBoundary(simulatedDemoVerifier);
 
-export type ResolvedRequest = { ok: true; credential: unknown; dataset: string } | { ok: false; reason: string };
+
 /** Demo request resolver: validates the request shape and turns the claimed role into a credential for the identity boundary to judge.
  * It issues nothing and reads no tenant, actor, workspace or permission from the request. */
 export function resolveDemoRequest(input: unknown): ResolvedRequest {
   const req = RequestSchema.safeParse(input);
   if (!req.success) return { ok: false, reason: `Invalid request: ${req.error.issues.map((i) => i.message).join("; ")}` };
   const claim: DemoRoleClaim = { kind: "simulated-demo-role-claim", roleId: req.data.roleId };
-  return { ok: true, credential: claim, dataset: req.data.scenarioId };
+  return { ok: true, credential: claim, dataset: req.data.scenarioId, ...(req.data.question !== undefined ? { question: req.data.question } : {}) };
 }
 
 /** Authorize a demo request's evidence directly (used by tests and by `authorizedRecords`). Same checks as the live path, in the same order. */

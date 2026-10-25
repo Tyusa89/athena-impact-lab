@@ -19,6 +19,10 @@ export interface VerifiedFact {
   direction: "up" | "down" | "flat";
 }
 
+/** Invisible / formatting characters that can split or hide text: soft hyphen, combining grapheme joiner, Arabic letter mark,
+ * Hangul/Khmer/Mongolian fillers, zero-width and bidi controls, word joiner and invisible operators, variation selectors, BOM. */
+export const INVISIBLE_CHARS = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+
 export const factIdFor = (m: MetricKey) => `F-${m}`;
 
 /** Verified facts from authorized records only, via the engine's own computeFacts (one fact per metric). */

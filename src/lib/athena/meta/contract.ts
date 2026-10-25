@@ -12,7 +12,8 @@ import { z } from "zod";
 import { PERIODS, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
 import { renderFindings, type VerifiedFinding } from "./findings";
-import { buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
+import { checkSemantics } from "./semanticGuards";
+import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
@@ -102,7 +103,8 @@ export function buildMessages(question: string, records: EvidenceRecord[]) {
   const system =
     "You analyse SYNTHETIC business facts for a fictional company. Use ONLY VERIFIED_FACTS, which the server computed. " +
     "Refer to facts only by fact_id in refs. NEVER write any digit or number in any text: Athena displays every number itself, " +
-    "and you must not restate what a metric did. Give unverified interpretations (co-movement, not causation or proof), " +
+    "and you must not restate what a metric did, spell out numbers, fractions or multiples (such as forty percent, half, doubled), " +
+    "or discuss any metric or department that is not in VERIFIED_FACTS. Give unverified interpretations (co-movement, not causation or proof), " +
     "proposed actions that require human approval (you cannot execute anything), and missing_evidence. " +
     "Every interpretation and recommendation must have refs listing the fact_ids it relies on. " +
     "BE TERSE: at most " + `${LIMITS.interpretations} interpretations, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
@@ -119,14 +121,11 @@ const CAUSE_WORD = /\bcauses?\b/;
 const INVESTIGATIVE = /\b(investigate|investigating|identify|examine|review|explore|assess|determine|diagnose|analy[sz]e|check|audit|verify|test|possible|potential|likely|underlying|root)\b/;
 
 /** Normalize to defeat case/width/zero-width obfuscation (NFKC, strip invisible chars, lowercase). */
-/** Invisible / formatting characters that can split or hide an identifier: soft hyphen, combining grapheme joiner, Arabic letter mark,
- * Hangul/Khmer/Mongolian fillers, zero-width and bidi controls, word joiner and invisible operators, variation selectors, BOM. */
-const INVISIBLE = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 /** Comparison key for leak detection: NFKD (folds full-width and compatibility forms, splits accents), drops invisible characters
  * and combining marks, lower-cases, and keeps only letters and digits, so dash variants, spaces, underscores, case and zero-width
  * insertions cannot hide an identifier. Applied to BOTH the hidden identifier and the model text before comparing. */
 export const leakKey = (t: string) =>
-  t.normalize("NFKD").replace(INVISIBLE, "").replace(/\p{M}/gu, "").normalize("NFKD").replace(INVISIBLE, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  t.normalize("NFKD").replace(INVISIBLE_CHARS, "").replace(/\p{M}/gu, "").normalize("NFKD").replace(INVISIBLE_CHARS, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 export const normalizeText = (t: string) => t.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\s+/g, " ").toLowerCase();
 
@@ -180,6 +179,10 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   for (const [t, inv] of causalChecks) if (hasCausalClaim(t, inv)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
   const recordIds = allRecords.map((r) => r.id);
   for (const t of texts) errors.push(...verifyNoNumerals(t, recordIds));
+  // Semantic guards (Phase 2B-2): directional contradictions, magnitude expressions, unauthorized domains. Reject, never rewrite.
+  for (const x of out.interpretations) errors.push(...checkSemantics(x.text, "interpretation", facts));
+  for (const x of out.recommendations) errors.push(...checkSemantics(x.text, "recommendation", facts));
+  for (const t of out.missing_evidence) errors.push(...checkSemantics(t, "gap", facts));
   if (errors.length) return { ok: false, errors };
   const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
   return {

@@ -212,7 +212,7 @@ describe("MetaPanel — three lanes", () => {
     await runOk();
     for (const name of ["Muse Spark interpretations", "Proposed actions"]) {
       const lane = screen.getByRole("region", { name });
-      expect(lane).toHaveTextContent("Based on verified findings");
+      expect(lane).toHaveTextContent("Model cites these verified findings");
       expect(lane).toHaveTextContent("SERVER-RENDERED finding for exec answer");
       expect(lane).toHaveTextContent("[R1, R2]");
     }
@@ -220,6 +220,63 @@ describe("MetaPanel — three lanes", () => {
   it("proposed actions state they need human approval and are not executable", async () => {
     await runOk();
     expect(screen.getByRole("region", { name: "Proposed actions" })).toHaveTextContent("needs human approval; not executable");
+  });
+});
+
+describe("MetaPanel — accuracy of model-authored content (S4)", () => {
+  const dup = (): MetaResult => ({
+    state: "ok", requestSent: true, authorizedIds: ["R1", "R2"],
+    findings: [finding("F-revenue", "SERVER-RENDERED finding")],
+    output: {
+      interpretations: Array(2).fill({ text: "same sentence", verified: false as const, refs: ["F-revenue"], supporting_ids: ["R1", "R2"] }),
+      missing_evidence: ["same gap", "same gap"],
+      recommendations: Array(2).fill({ text: "same action", requires_human_approval: true as const, refs: ["F-revenue"], supporting_ids: ["R1", "R2"] }),
+    },
+  });
+  const show = async (r: MetaResult) => {
+    runFn.mockResolvedValueOnce(r);
+    render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Verified findings" })).toBeInTheDocument());
+  };
+  it("says the MODEL cites the findings, and no longer claims the items are 'based on' verified findings", async () => {
+    await show(ok("exec answer"));
+    expect(screen.getAllByText("Model cites these verified findings").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Based on verified findings/)).not.toBeInTheDocument();
+  });
+  it("labels missing-evidence text as model-generated and unverified, outside the verified section", async () => {
+    const r = ok("exec answer");
+    if (r.state === "ok") r.output.missing_evidence = ["Need attribution data by channel."];
+    await show(r);
+    const gaps = screen.getByRole("region", { name: "Gaps noted by the model" });
+    expect(gaps).toHaveTextContent("model-generated");
+    expect(gaps).toHaveTextContent("unverified");
+    expect(gaps).toHaveTextContent("Need attribution data by channel.");
+    expect(within(screen.getByRole("region", { name: "Verified findings" })).queryByText(/attribution/)).not.toBeInTheDocument();
+  });
+  it("omits the gaps section when the model noted none", async () => {
+    await show(ok("exec answer"));
+    expect(screen.queryByRole("region", { name: "Gaps noted by the model" })).not.toBeInTheDocument();
+  });
+  it("repeated identical model output renders every item without duplicate-key warnings", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await show(dup());
+    expect(within(screen.getByRole("region", { name: "Muse Spark interpretations" })).getAllByText("same sentence")).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: "Proposed actions" })).getAllByText(/same action/)).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: "Gaps noted by the model" })).getAllByText("same gap")).toHaveLength(2);
+    expect(spy.mock.calls.filter((c) => /same key|unique "key"/i.test(String(c[0])))).toEqual([]);
+    spy.mockRestore();
+  });
+  it("repeated identical validation errors also render without key collisions", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    runFn.mockResolvedValueOnce({ state: "rejected", requestSent: true, errors: ["same error", "same error"] } satisfies MetaResult);
+    render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    await waitFor(() => expect(screen.getAllByText("same error")).toHaveLength(2));
+    expect(spy.mock.calls.filter((c) => /same key|unique "key"/i.test(String(c[0])))).toEqual([]);
+    spy.mockRestore();
   });
 });
 

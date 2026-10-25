@@ -68,18 +68,31 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
   const est = estimateTokens(JSON.stringify(messages));
   if (est > MAX_INPUT_TOKENS) return { state: "blocked", reason: `Estimated input ${est} tokens exceeds budget ${MAX_INPUT_TOKENS}.`, requestSent: false };
 
+  // One deadline covers the request AND the full response body. It is enforced here (not only via the abort signal) so a
+  // stalled body or a fetch that ignores the signal still ends at REQUEST_TIMEOUT_MS. Exactly one attempt; never retried.
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
-  let res: Response;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { ctrl.abort(); reject(new Error("deadline")); }, REQUEST_TIMEOUT_MS);
+  });
+  deadline.catch(() => {}); // already handled here; still raceable below
+  let res: Response | undefined;
+  let raw = "";
   try {
-    res = await fetchImpl(META_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.META_MODEL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildBody(messages)),
-      signal: ctrl.signal,
-    });
+    res = await Promise.race([
+      fetchImpl(META_ENDPOINT, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.META_MODEL_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(messages)),
+        signal: ctrl.signal,
+      }),
+      deadline,
+    ]);
+    if (res.ok) raw = await Promise.race([res.text(), deadline]);
   } catch (e) {
-    return { state: "error", reason: `Network error (not retried): ${e instanceof Error ? e.name : "unknown"}`, requestSent: true };
+    void res?.body?.cancel().catch(() => {});
+    const timedOut = ctrl.signal.aborted;
+    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Network error (not retried): ${e instanceof Error ? e.name : "unknown"}`, requestSent: true };
   } finally { clearTimeout(timer); }
 
   if (!res.ok) {
@@ -87,7 +100,7 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
     return { state: "error", reason: `Meta API returned HTTP ${res.status} (not retried).`, requestSent: true };
   }
   let body: { choices?: { message?: { content?: unknown }; finish_reason?: string }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
-  try { body = await res.json(); } catch { return { state: "error", reason: "Response body is not JSON.", requestSent: true }; }
+  try { body = JSON.parse(raw); } catch { return { state: "error", reason: "Response body is not JSON.", requestSent: true }; }
   const choice = body.choices?.[0];
   const usage = readUsage(body, choice?.finish_reason);
   // Redacted diagnostic log: token accounting only, never key, prompt or content.

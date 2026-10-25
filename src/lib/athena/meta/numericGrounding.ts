@@ -4,7 +4,7 @@
 // (see findings.ts). Free model text may therefore contain no numerals at all, so a number can never be attached
 // to the wrong metric, period or direction by the model. Anything unverifiable is rejected (fail closed).
 // Text is NFKC-normalized before scanning; numeric characters that stay non-ASCII are rejected outright.
-import type { EvidenceRecord, MetricKey } from "../data";
+import { PERIODS, type EvidenceRecord, type MetricKey } from "../data";
 import { computeFacts } from "../engine";
 
 export interface VerifiedFact {
@@ -52,12 +52,19 @@ export function supportingIdsFor(refs: readonly string[], facts: readonly Verifi
   return out;
 }
 
+/** Years that appear in the authorized reporting-period labels (e.g. "Q2 2026" -> 2026). Only these may be exempt, and only as a period reference. */
+const REPORTING_YEARS = [...new Set(Object.values(PERIODS).flatMap((p) => p.label.match(/\b20\d{2}\b/g) ?? []))];
+const Y = `(?:${REPORTING_YEARS.join("|")})`;
+/** Legitimate period references: "Q3 2026", "2026 Q3", "FY2026"/"fiscal 2026", and a bare "in/during 2026" only when it ends the clause
+ * (so "in 2026 units" or "in 2026 dollars" is NOT exempt). Any other year-shaped number is an ordinary numeral. */
+const PERIOD_REF = new RegExp(`\\bq[1-4]\\s+${Y}\\b|\\b${Y}\\s+q[1-4]\\b|\\b(?:fy|fiscal)\\s*${Y}\\b|\\b(?:in|during)\\s+${Y}\\b(?=\\s*(?:[.,;:!?)]|$))`, "gi");
+
 /** NFKC-normalize (folds full-width digits, circled digits, vulgar fractions to ASCII) and drop invisible characters, then
- * remove the intentionally exempt tokens: record ids, quarter labels and years. */
+ * remove the intentionally exempt tokens: record ids, reporting-period references and bare quarter labels. */
 function scannable(text: string, recordIds: readonly string[]): string {
-  let t = text.normalize("NFKC").replace(/[­​-‏⁠﻿]/g, "");
+  let t = text.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "");
   for (const id of recordIds) t = t.split(id).join(" ");
-  return t.replace(/\bq[1-4]\b/gi, " ").replace(/\b20\d{2}\b/g, " ");
+  return t.replace(PERIOD_REF, " ").replace(/\bq[1-4]\b/gi, " ");
 }
 
 /** ASCII numeric tokens in free text after normalization and exemptions. Commas and sign are ignored. */

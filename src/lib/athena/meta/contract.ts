@@ -119,6 +119,15 @@ const CAUSE_WORD = /\bcauses?\b/;
 const INVESTIGATIVE = /\b(investigate|investigating|identify|examine|review|explore|assess|determine|diagnose|analy[sz]e|check|audit|verify|test|possible|potential|likely|underlying|root)\b/;
 
 /** Normalize to defeat case/width/zero-width obfuscation (NFKC, strip invisible chars, lowercase). */
+/** Invisible / formatting characters that can split or hide an identifier: soft hyphen, combining grapheme joiner, Arabic letter mark,
+ * Hangul/Khmer/Mongolian fillers, zero-width and bidi controls, word joiner and invisible operators, variation selectors, BOM. */
+const INVISIBLE = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+/** Comparison key for leak detection: NFKD (folds full-width and compatibility forms, splits accents), drops invisible characters
+ * and combining marks, lower-cases, and keeps only letters and digits, so dash variants, spaces, underscores, case and zero-width
+ * insertions cannot hide an identifier. Applied to BOTH the hidden identifier and the model text before comparing. */
+export const leakKey = (t: string) =>
+  t.normalize("NFKD").replace(INVISIBLE, "").replace(/\p{M}/gu, "").normalize("NFKD").replace(INVISIBLE, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
 export const normalizeText = (t: string) => t.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\s+/g, " ").toLowerCase();
 
 /** Returns true if text makes an unsupported causal claim. Investigative wording is allowed only in
@@ -158,7 +167,11 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   const errors: string[] = [];
   for (const ref of new Set([...out.interpretations, ...out.recommendations].flatMap((x) => x.refs))) if (!known.has(ref)) errors.push(`Unknown or unauthorized fact reference: ${ref}`);
   const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
-  for (const r of hidden) if (texts.some((t) => t.includes(r.id) || t.includes(r.source))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
+  const textKeys = texts.map(leakKey);
+  for (const r of hidden) {
+    const idKey = leakKey(r.id), sourceKey = leakKey(r.source);
+    if (textKeys.some((k) => (idKey && k.includes(idKey)) || (sourceKey && k.includes(sourceKey)))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
+  }
   const causalChecks: [string, boolean][] = [
     ...out.interpretations.map((x) => [x.text, false] as [string, boolean]),
     ...out.missing_evidence.map((x) => [x, true] as [string, boolean]),

@@ -12,7 +12,7 @@ function BasedOn({ refs, findings }: { refs: string[]; findings: VerifiedFinding
   const rows = refs.map((r) => findings.find((f) => f.fact_id === r)).filter((f): f is VerifiedFinding => !!f);
   return (
     <ul className="mt-1 space-y-0.5 border-l-2 border-success/50 pl-2 text-[10px] text-muted-foreground">
-      <li className="font-mono uppercase tracking-widest">Based on verified findings</li>
+      <li className="font-mono uppercase tracking-widest">Model cites these verified findings</li>
       {rows.map((f) => <li key={f.fact_id}>✓ {f.text} <span className="font-mono text-accent">[{f.supporting_ids.join(", ")}]</span></li>)}
     </ul>
   );
@@ -92,7 +92,7 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
           {result && result.state !== "ok" && (
             <div className="mt-2 text-xs text-destructive">
               <b>{result.state}</b>{"reason" in result ? `: ${result.reason}` : ""}
-              {"errors" in result && <ul className="list-disc pl-4">{result.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+              {"errors" in result && <ul className="list-disc pl-4">{result.errors.map((e, i) => <li key={`err-${i}`}>{e}</li>)}</ul>}
             </div>
           )}
           {result?.state === "ok" && (
@@ -112,8 +112,8 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
                 <h4 className="font-semibold text-warning">Interpretations <span className="font-normal text-muted-foreground">· written by {META_MODEL} · UNVERIFIED hypotheses, not facts</span></h4>
                 {result.output.interpretations.length === 0 && <p className="mt-1 text-muted-foreground">None returned.</p>}
                 <ul className="mt-1 space-y-1">
-                  {result.output.interpretations.map((o) => (
-                    <li key={o.text} className="rounded border border-warning/40 bg-warning/10 p-1.5">
+                  {result.output.interpretations.map((o, i) => (
+                    <li key={`interp-${i}`} className="rounded border border-warning/40 bg-warning/10 p-1.5">
                       <span className="mr-1 rounded bg-warning/20 px-1 font-mono text-[10px] text-warning">unverified</span>{o.text}
                       <BasedOn refs={o.refs} findings={result.findings} />
                     </li>
@@ -124,8 +124,8 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
                 <h4 className="font-semibold">Proposed actions <span className="font-normal text-muted-foreground">· written by {META_MODEL} · require human approval · not executable</span></h4>
                 {result.output.recommendations.length === 0 && <p className="mt-1 text-muted-foreground">None returned.</p>}
                 <ul className="mt-1 space-y-1">
-                  {result.output.recommendations.map((o) => (
-                    <li key={o.text} className="rounded border border-border p-1.5">
+                  {result.output.recommendations.map((o, i) => (
+                    <li key={`rec-${i}`} className="rounded border border-border p-1.5">
                       {o.text} <i className="text-muted-foreground">(needs human approval; not executable)</i>
                       <BasedOn refs={o.refs} findings={result.findings} />
                     </li>
@@ -133,7 +133,10 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
                 </ul>
               </section>
               {result.output.missing_evidence.length > 0 && (
-                <ul className="list-disc pl-4 text-muted-foreground">{result.output.missing_evidence.map((o) => <li key={o}>Missing: {o}</li>)}</ul>
+                <section aria-label="Gaps noted by the model">
+                  <h4 className="font-semibold text-muted-foreground">Gaps noted by {META_MODEL} <span className="font-normal">· model-generated · unverified</span></h4>
+                  <ul className="mt-1 list-disc pl-4 text-muted-foreground">{result.output.missing_evidence.map((o, i) => <li key={`gap-${i}`}>{o}</li>)}</ul>
+                </section>
               )}
             </div>
           )}

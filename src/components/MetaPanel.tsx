@@ -85,7 +85,7 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
           )}
           {result?.state === "ok" && (
             <div className="mt-2 space-y-2 text-xs">
-              <ul className="list-disc pl-4">{result.output.observations.map((o) => <li key={o.text}>{o.text} <span className="font-mono text-accent">[{o.cited_ids.join(", ")}]</span></li>)}</ul>
+              <ul className="list-disc pl-4">{result.output.observations.map((o) => <li key={o.text}>{o.text} <span className="font-mono text-accent">[{o.cited_ids.join(", ")}]</span>{o.claims.map((c) => <span key={`${c.fact_id}-${c.kind}-${c.period ?? ""}`} className="ml-1 rounded bg-success/10 px-1 font-mono text-[10px] text-success">✓ verified {c.metric} {c.kind}{c.period ? ` ${c.period}` : ""} = {c.value} {c.unit}</span>)}</li>)}</ul>
               <ul className="list-disc pl-4 text-warning">{result.output.hypotheses.map((o) => <li key={o.text}>Unverified: {o.text}</li>)}</ul>
               <ul className="list-disc pl-4 text-muted-foreground">{result.output.missing_evidence.map((o) => <li key={o}>Missing: {o}</li>)}</ul>
               <ul className="list-disc pl-4">{result.output.recommendations.map((o) => <li key={o.text}>{o.text} <i className="text-muted-foreground">(needs human approval; not executable)</i></li>)}</ul>

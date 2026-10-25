@@ -1,11 +1,13 @@
 // Server-only Meta adapter. Exactly one request, no retries, hard token budget.
 // Never executes approvals/actions: it only returns validated text.
-import { SCENARIOS } from "../data";
+import { SCENARIOS, type EvidenceRecord } from "../data";
 import { DEMO_QUESTION } from "../engine";
 import {
   META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REASONING_EFFORT, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
   RequestSchema, authorizedRecords, buildMessages, estimateTokens, validateOutput, type MetaOutput,
 } from "./contract";
+import type { VerifiedFinding } from "./findings";
+import { buildVerifiedFacts, uncoveredRecordIds } from "./numericGrounding";
 
 export interface MetaEnv { META_MODEL_API_KEY?: string | undefined; META_MODEL_ENABLED?: string | undefined }
 
@@ -21,7 +23,8 @@ export type MetaResult =
   | { state: "blocked"; reason: string; requestSent: false }
   | { state: "error"; reason: string; requestSent: boolean; usage?: Usage | undefined }
   | { state: "rejected"; errors: string[]; requestSent: true; usage?: Usage | undefined }
-  | { state: "ok"; output: MetaOutput; requestSent: true; usage?: Usage | undefined; authorizedIds: string[] };
+  // findings: verified, Athena-rendered on the server from authorized facts (no model text). output: unverified model lanes.
+  | { state: "ok"; findings: VerifiedFinding[]; output: MetaOutput; requestSent: true; usage?: Usage | undefined; authorizedIds: string[] };
 export type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; reasoning_tokens?: number; visible_output_tokens?: number; finish_reason?: string; max_tokens_sent: number };
 
 /** Build the outbound body. Exported for tests; the cap is clamped to the hard server constant. */
@@ -41,6 +44,15 @@ export function readUsage(body: { usage?: { prompt_tokens?: number; completion_t
   return out;
 }
 
+/** Facts-only prompting is allowed only when every authorized record is represented by a verified fact. Otherwise nothing is sent. */
+export function factsBlockReason(records: EvidenceRecord[]): string | null {
+  const facts = buildVerifiedFacts(records);
+  const uncovered = uncoveredRecordIds(records, facts);
+  if (facts.length === 0) return "Authorized evidence yields no verified facts; nothing sent.";
+  if (uncovered.length > 0) return `Authorized evidence cannot be fully represented as verified facts (${uncovered.length} record(s) unpaired); nothing sent.`;
+  return null;
+}
+
 export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch): Promise<MetaResult> {
   const st = metaStatus(env);
   if (!st.keyConfigured) return { state: "blocked", reason: "META_MODEL_API_KEY is not configured on the server.", requestSent: false };
@@ -50,6 +62,8 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
 
   const records = authorizedRecords(req.data); // permission filtering BEFORE prompt
   if (records.length === 0) return { state: "blocked", reason: "No records in authorized workspaces; nothing to send.", requestSent: false };
+  const unfit = factsBlockReason(records);
+  if (unfit) return { state: "blocked", reason: unfit, requestSent: false };
   const messages = buildMessages(DEMO_QUESTION, records);
   const est = estimateTokens(JSON.stringify(messages));
   if (est > MAX_INPUT_TOKENS) return { state: "blocked", reason: `Estimated input ${est} tokens exceeds budget ${MAX_INPUT_TOKENS}.`, requestSent: false };
@@ -85,5 +99,5 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
   const all = SCENARIOS.find((s) => s.id === req.data.scenarioId)!.records;
   const v = validateOutput(choice.message.content, records, all);
   if (!v.ok) return { state: "rejected", errors: v.errors, requestSent: true, usage };
-  return { state: "ok", output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
+  return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
 }

@@ -8,6 +8,7 @@ Build an isolated, unpublished prototype named 'Athena Business Impact Engine â€
 - **Optional live Meta API analysis** (`muse-spark-1.3`): off by default. Runs only on the server, once, with no retries and hard token caps, and only when `META_MODEL_API_KEY` and `META_MODEL_ENABLED=true` are set on the server *and* the user confirms each run. It is a paid call. Output is schema- and citation-validated against permission-filtered records and is never executable.
 - **Role filtering is simulated, not authorization.** There is no sign-in; anyone can claim any demo role.
 - Responses from the Meta call are discarded if the role, scenario or request changed while they were in flight.
+- Meta output is split into three lanes: **verified findings** (computed and rendered by Athena on the server; no model text), **interpretations** (Muse Spark, always unverified, each pointing at verified facts) and **proposed actions** (Muse Spark, need human approval, never executable). The model may not write numbers; Athena shows them. Known gap: contradictory prose that contains no digits can still appear in the unverified lanes until the planned lexicon guards (Phase 2B-2).
 - Still synthetic only: no EcoNest/Pendia connection, database, auth or deployment.
 
 This project was built with [Lovable](https://lovable.dev).

@@ -11,11 +11,13 @@ const req = (roleId: string = "exec", scenarioId = "baseline") => ({ scenarioId,
 function mockFetch(content: unknown, extra: Record<string, unknown> = {}) {
   return vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) }, finish_reason: "stop" }], usage: { prompt_tokens: 500, completion_tokens: 200, total_tokens: 700 }, ...extra }), { status: 200 }));
 }
+// v2 (three-lane) fixture. `id` may be a record id (mapped to that record's metric fact id) or a fact id / arbitrary ref.
+// A record from a workspace the role cannot see maps to a fact the role does not have, so it must be rejected.
+const toRef = (id: string) => { const rec = SCENARIOS.flatMap((s) => s.records).find((r) => r.id === id); return rec ? `F-${rec.metric}` : id; };
 const good = (id: string) => ({
-  observations: [{ text: "Revenue fell between periods.", cited_ids: [id] }],
-  hypotheses: [{ text: "Lower demand may be related.", verified: false, cited_ids: [id] }],
+  interpretations: [{ text: "Lower demand may be related.", verified: false as const, refs: [toRef(id)] }],
   missing_evidence: ["No attribution data."],
-  recommendations: [{ text: "Re-forecast next quarter.", requires_human_approval: true, cited_ids: [id] }],
+  recommendations: [{ text: "Re-forecast next quarter.", requires_human_approval: true as const, refs: [toRef(id)] }],
 });
 
 describe("meta gating — no outbound calls", () => {
@@ -83,14 +85,14 @@ describe("meta output validation", () => {
     expect((await runMeta(req("finance"), READY, mockFetch({ observations: [] }) as never)).state).toBe("rejected");
     expect((await runMeta(req("finance"), READY, mockFetch({ ...good(finId()), execute: true }) as never)).state).toBe("rejected");
   });
-  it("hallucinated citation rejected", async () => {
-    const o = good(finId()); o.observations[0]!.cited_ids = ["VH-FAKE-999"];
+  it("hallucinated fact reference rejected", async () => {
+    const o = good(finId()); o.interpretations[0]!.refs = ["F-fake-999"];
     const r = await runMeta(req("finance"), READY, mockFetch(o) as never);
-    expect(r.state).toBe("rejected"); if (r.state === "rejected") expect(r.errors.join()).toContain("VH-FAKE-999");
+    expect(r.state).toBe("rejected"); if (r.state === "rejected") expect(r.errors.join()).toContain("F-fake-999");
   });
-  it("citing a real but unauthorized record is rejected (cross-workspace)", async () => {
+  it("referencing a real but unauthorized fact is rejected (cross-workspace)", async () => {
     const hidden = SCENARIOS[0]!.records.find((x) => x.workspace === "ws-marketing")!.id;
-    const o = good(finId()); o.hypotheses[0]!.cited_ids = [hidden];
+    const o = good(finId()); o.interpretations[0]!.refs = [toRef(hidden)];
     expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("mentioning an unauthorized record in text is rejected", async () => {
@@ -99,13 +101,13 @@ describe("meta output validation", () => {
     expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("verified hypothesis or auto-executed recommendation rejected", async () => {
-    const a = good(finId()) as any; a.hypotheses[0].verified = true;
+    const a = good(finId()) as any; a.interpretations[0].verified = true;
     const b = good(finId()) as any; b.recommendations[0].requires_human_approval = false;
     expect((await runMeta(req("finance"), READY, mockFetch(a) as never)).state).toBe("rejected");
     expect((await runMeta(req("finance"), READY, mockFetch(b) as never)).state).toBe("rejected");
   });
   it("causal-proof language rejected", async () => {
-    const o = good(finId()); o.observations[0]!.text = "Fulfillment delays caused the revenue drop.";
+    const o = good(finId()); o.interpretations[0]!.text = "Fulfillment delays caused the revenue drop.";
     expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
   it("truncated or over-budget output rejected", async () => {
@@ -157,12 +159,12 @@ describe("truncation fix — token accounting & compact schema", () => {
   });
   it("compact schema limits enforced (counts & text length)", () => {
     const o = good(finId());
-    expect(OutputSchema.safeParse({ ...o, observations: Array(LIMITS.observations + 1).fill(o.observations[0]) }).success).toBe(false);
+    expect(OutputSchema.safeParse({ ...o, interpretations: Array(LIMITS.interpretations + 1).fill(o.interpretations[0]) }).success).toBe(false);
     expect(OutputSchema.safeParse({ ...o, missing_evidence: ["x".repeat(LIMITS.text + 1)] }).success).toBe(false);
     expect(OutputSchema.safeParse(o).success).toBe(true);
-    expect(RESPONSE_FORMAT.json_schema.schema.properties.observations.maxItems).toBe(LIMITS.observations);
+    expect(RESPONSE_FORMAT.json_schema.schema.properties.interpretations.maxItems).toBe(LIMITS.interpretations);
   });
-  it("Baseline (paid-social surge) × executive: valid compact reply passes; restricted role cannot cite hidden ids", async () => {
+  it("Baseline (paid-social surge) × executive: valid compact reply passes; restricted role cannot reference hidden facts", async () => {
     const s = SCENARIOS.find((x) => x.id === "baseline")!;
     const allIds = authorizedRecords(req("exec", s.id)).map((r) => r.id);
     expect((await runMeta(req("exec", s.id), READY, mockFetch(good(allIds[0]!)) as never)).state).toBe("ok");
@@ -208,13 +210,13 @@ describe("causal wording validator (Test 002 regression)", () => {
     // "the cause of" without investigative cue: still rejected via CAUSE_WORD? only "cause" token
     expect(hasCausalClaim(t, true)).toBe(true);
   });
-  it("hypotheses and observations stay strict even with investigative wording", async () => {
+  it("interpretations stay strict even with investigative wording", async () => {
     expect(hasCausalClaim(exact, false)).toBe(true);
     const id = authorizedRecords(req("exec"))[0]!.id;
-    const o = good(id); o.hypotheses[0]!.text = "Possible causes include delays.";
+    const o = good(id); o.interpretations[0]!.text = "Possible causes include delays.";
     expect((await runMeta(req("exec"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
-  it("investigative wording does not bypass citation checks", async () => {
+  it("investigative wording does not bypass fact-reference checks", async () => {
     const o = good("VH-FAKE-1"); o.recommendations[0]!.text = exact;
     expect((await runMeta(req("finance"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
@@ -287,14 +289,14 @@ describe("Marketing Manager × Scenario A — local role-filter audit (no networ
   it.each(["ws-ops", "ws-finance"])("response citing or naming a hidden %s record is rejected", async (ws) => {
     const hidden = A.records.find((r) => r.workspace === ws)!;
     const ok = authorizedRecords(req("marketing"))[0]!.id;
-    const c = good(ok); c.observations[0]!.cited_ids = [hidden.id];
+    const c = good(ok); c.interpretations[0]!.refs = [toRef(hidden.id)];
     const n = good(ok); n.missing_evidence = [`Need ${hidden.id}`];
     const s = good(ok); s.recommendations[0]!.text = `Check ${hidden.source} data.`;
     for (const o of [c, n, s]) expect((await runMeta(req("marketing"), READY, mockFetch(o) as never)).state).toBe("rejected");
   });
-  it("valid reply citing only Marketing/Sales records passes", async () => {
+  it("valid reply referencing only Marketing/Sales facts passes", async () => {
     const ids = authorizedRecords(req("marketing")).map((r) => r.id);
-    const o = good(ids[0]!); o.observations[0]!.cited_ids = ids.slice(0, 6);
+    const o = good(ids[0]!); o.interpretations[0]!.refs = [...new Set(ids.map(toRef))].slice(0, 4);
     const r = await runMeta(req("marketing"), READY, mockFetch(o) as never);
     expect(r.state).toBe("ok");
     if (r.state === "ok") expect(r.authorizedIds.every((id) => MKT.includes(A.records.find((x) => x.id === id)!.workspace))).toBe(true);

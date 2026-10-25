@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROLES, SCENARIOS } from "@/lib/athena/data";
 import { analyze } from "@/lib/athena/engine";
@@ -18,9 +18,15 @@ function deferred<T>() {
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
 }
+const finding = (fact_id: string, text: string) => ({ fact_id, metric: "revenue" as const, department: "Finance" as const, direction: "down" as const, text, supporting_ids: ["R1", "R2"] });
 const ok = (text: string): MetaResult => ({
-  state: "ok", requestSent: true, authorizedIds: ["R1"],
-  output: { observations: [{ text, cited_ids: ["R1"], claims: [] }], hypotheses: [], missing_evidence: [], recommendations: [] },
+  state: "ok", requestSent: true, authorizedIds: ["R1", "R2"],
+  findings: [finding("F-revenue", "SERVER-RENDERED finding for " + text)],
+  output: {
+    interpretations: [{ text, verified: false, refs: ["F-revenue"], supporting_ids: ["R1", "R2"] }],
+    missing_evidence: [],
+    recommendations: [{ text: "Review " + text, requires_human_approval: true, refs: ["F-revenue"], supporting_ids: ["R1", "R2"] }],
+  },
 });
 
 const scenario = SCENARIOS[0]!;
@@ -57,7 +63,7 @@ describe("MetaPanel — stale responses", () => {
     await confirmAndRun();
     expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled();
     await act(async () => { d.resolve(ok("exec answer")); await d.promise; });
-    expect(screen.getByText(/exec answer/)).toBeInTheDocument();
+    expect(screen.getByText("exec answer")).toBeInTheDocument();
   });
 
   it("ignores a response that arrives after the role changed", async () => {
@@ -102,7 +108,7 @@ describe("MetaPanel — stale responses", () => {
     const { rerender } = render(ui(exec));
     await ready();
     await confirmAndRun();
-    await waitFor(() => expect(screen.getByText(/exec answer/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("exec answer")).toBeInTheDocument());
     rerender(ui(finance));
     expect(screen.queryByText(/exec answer/)).not.toBeInTheDocument();
     // Switching back must not resurrect the old result either.
@@ -137,7 +143,7 @@ describe("MetaPanel — stale responses", () => {
     expect(runFn.mock.calls[1]![0]).toEqual({ data: { scenarioId: "baseline", roleId: "finance", ownerConfirmed: true } });
     await act(async () => { b.resolve(ok("finance answer")); await b.promise; });
     await act(async () => { a.resolve(ok("STALE exec answer")); await a.promise; });
-    expect(screen.getByText(/finance answer/)).toBeInTheDocument();
+    expect(screen.getByText("finance answer")).toBeInTheDocument();
     expect(screen.queryByText(/STALE exec answer/)).not.toBeInTheDocument();
   });
 
@@ -155,7 +161,7 @@ describe("MetaPanel — stale responses", () => {
     expect(screen.queryByText(/STALE exec answer/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled(); // B still in flight
     await act(async () => { b.resolve(ok("finance answer")); await b.promise; });
-    expect(screen.getByText(/finance answer/)).toBeInTheDocument();
+    expect(screen.getByText("finance answer")).toBeInTheDocument();
   });
 
   it("does not apply a response after unmount", async () => {
@@ -169,6 +175,51 @@ describe("MetaPanel — stale responses", () => {
     await act(async () => { d.resolve(ok("late")); await d.promise; });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe("MetaPanel — three lanes", () => {
+  const runOk = async () => {
+    runFn.mockResolvedValueOnce(ok("exec answer"));
+    render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Verified findings" })).toBeInTheDocument());
+  };
+  it("renders verified findings, interpretations and proposed actions as separate labelled sections", async () => {
+    await runOk();
+    expect(screen.getByRole("region", { name: "Verified findings" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Muse Spark interpretations" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Proposed actions" })).toBeInTheDocument();
+  });
+  it("verified findings come from the server result, not from client-computed analysis", async () => {
+    await runOk();
+    const findings = screen.getByRole("region", { name: "Verified findings" });
+    expect(findings).toHaveTextContent("SERVER-RENDERED finding for exec answer");
+    expect(findings).toHaveTextContent("✓ verified");
+  });
+  it("model interpretations are never inside the verified section and are labelled unverified", async () => {
+    await runOk();
+    const findings = screen.getByRole("region", { name: "Verified findings" });
+    const interp = screen.getByRole("region", { name: "Muse Spark interpretations" });
+    expect(findings).not.toHaveTextContent(/^exec answer$/);
+    expect(within(findings).queryByText("exec answer")).not.toBeInTheDocument();
+    expect(interp).toHaveTextContent("unverified");
+    expect(interp).toHaveTextContent(/UNVERIFIED hypotheses, not facts/);
+    expect(interp).not.toHaveTextContent("✓ verified exec");
+  });
+  it("shows the supporting verified facts for each interpretation and each proposed action", async () => {
+    await runOk();
+    for (const name of ["Muse Spark interpretations", "Proposed actions"]) {
+      const lane = screen.getByRole("region", { name });
+      expect(lane).toHaveTextContent("Based on verified findings");
+      expect(lane).toHaveTextContent("SERVER-RENDERED finding for exec answer");
+      expect(lane).toHaveTextContent("[R1, R2]");
+    }
+  });
+  it("proposed actions state they need human approval and are not executable", async () => {
+    await runOk();
+    expect(screen.getByRole("region", { name: "Proposed actions" })).toHaveTextContent("needs human approval; not executable");
   });
 });
 

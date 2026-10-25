@@ -6,6 +6,7 @@ import { approvalReducer, decisionOf } from "@/lib/athena/approvals";
 import { useReducer } from "react";
 import { PROVIDERS } from "@/lib/athena/provider";
 import { MetaPanel } from "@/components/MetaPanel";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -90,6 +91,7 @@ function Index() {
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">EcoNest · Hackathon Lab · Prototype</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Athena Business Impact Engine</h1>
+            <p className="mt-1 text-sm"><Link to="/impact" className="text-accent underline">Open the interactive Business Impact Map →</Link></p>
             <p className="mt-2 text-sm text-muted-foreground">
               Company: <span className="font-semibold text-foreground">{COMPANY.name}</span> <Pill className="ml-1 border-warning/50 text-warning">{COMPANY.label}</Pill>
             </p>

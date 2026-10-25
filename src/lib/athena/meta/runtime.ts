@@ -163,7 +163,7 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
   return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
 }
 
-export type ImpactResult = { state: "ok"; impact: ImpactMap; authorizedIds: string[] } | { state: "blocked"; reason: string };
+export type ImpactResult = { state: "ok"; impact: ImpactMap; authorizedIds: string[]; /** The authorized evidence the map was built from. SERVER-SIDE ONLY: an application projects what it presents from it; it is never serialized as is. */ records: AuthorizedEvidence } | { state: "blocked"; reason: string };
 /**
  * The deterministic path: the same resolve -> validate question -> authenticate -> authorize -> full-coverage steps as `runAnalysis`, then a Business Impact Map built
  * from authorized facts and the operator's relationship model. NO model provider is involved: nothing is sent anywhere, no key is needed, and the result is a pure
@@ -174,7 +174,8 @@ export async function runImpactAnalysis(input: unknown, runtime: Pick<EngineRunt
   if (!prep.ok) return { state: "blocked", reason: prep.reason };
   try {
     const impact = buildImpactMap(prep.records, runtime.analysis, model, { question: prep.question, discoverableMetrics: prep.discoverableMetrics, ...(opts.provenance ? { provenance: opts.provenance } : {}) });
-    return { state: "ok", impact, authorizedIds: prep.records.map((r) => r.id) };
+    // `records` is deliberately NOT enumerable: it is for server-side projection only, so serializing or snapshotting a result (JSON, spread, deep equality) never includes evidence.
+    return Object.defineProperty({ state: "ok" as const, impact, authorizedIds: prep.records.map((r) => r.id) }, "records", { value: prep.records, enumerable: false }) as ImpactResult & { state: "ok" };
   } catch {
     return { state: "blocked", reason: "Engine configuration error; nothing computed." }; // an invalid catalog or relationship model: fail closed, say nothing about it
   }

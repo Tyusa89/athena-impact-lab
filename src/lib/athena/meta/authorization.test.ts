@@ -342,7 +342,9 @@ describe("structure: the live path cannot reach raw evidence", () => {
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
     const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary/.test(readFileSync(f, "utf8")));
     // core/ingest/testSupport.ts is the ingestion tests' own composition root; it must never be imported by production code (checked next)
-    expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/core/ingest/testSupport.ts", "src/lib/athena/prototypeAdapter.ts"]);
+    // src/lib/athena/workbench/workbench.server.ts is the composition root of the interactive Business Impact Map's second (customer-support) dataset: it designates one
+    // SIMULATED identity adapter for its fixed synthetic tenant, exactly as the prototype adapter does for the demo tenant. It is server-only (checked below).
+    expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/core/ingest/testSupport.ts", "src/lib/athena/prototypeAdapter.ts", "src/lib/athena/workbench/workbench.server.ts"]);
     const importers = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && f !== "src/lib/athena/core/ingest/testSupport.ts" && /testSupport/.test(readFileSync(f, "utf8")));
     expect(importers).toEqual([]);
   });

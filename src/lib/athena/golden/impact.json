@@ -1,0 +1,5294 @@
+{
+ "baseline/exec/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue",
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,200 leads → 6,300 leads (+50% relative)",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 34% → 21% (-38.2% relative, -13 pp)",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.1 days → 7.8 days (+151.6% relative)",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 4% → 17% (+325% relative, +13 pp)",
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,240,000 → $1,018,000 (-17.9% relative)",
+     "supporting_ids": [
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-cac",
+     "metric": "cac",
+     "label": "Customer acquisition cost",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Customer acquisition cost increased: $118 → $141 (+19.5% relative)",
+     "supporting_ids": [
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "sources": [
+      "SYN-Ads Spend Ledger"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Recognized revenue decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Customer acquisition cost increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-cac"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-lead-quality",
+     "statement": "Possible implication (unverified hypothesis): A lower-intent lead mix may be associated with the drop in lead quality.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "missing_evidence": [
+      "Lead source or channel mix by period.",
+      "Whether the lead scoring definition changed between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower revenue, for example through delayed recognition.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Recognition timing against shipment dates.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-acquisition-cost",
+     "statement": "Possible implication (unverified hypothesis): Growth in lead volume may be associated with a higher cost per acquired customer.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-leads",
+      "F-cac"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "missing_evidence": [
+      "Spend by channel.",
+      "Customers acquired by channel.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Lead source or channel mix by period.",
+    "Whether the lead scoring definition changed between periods.",
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "Recognition timing against shipment dates.",
+    "Spend by channel.",
+    "Customers acquired by channel.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-leads-vs-lead-quality",
+     "relationship_id": "leads-vs-lead-quality",
+     "title": "Review the channel mix toward higher-quality sources as a two-week test.",
+     "owner": "Marketing",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: A lower-intent lead mix may be associated with the drop in lead quality.",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-MKT-001-Q2",
+   "VH-MKT-001-Q3",
+   "VH-MKT-002-Q2",
+   "VH-MKT-002-Q3",
+   "VH-MKT-003-Q2",
+   "VH-MKT-003-Q3",
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3",
+   "VH-OPS-001-Q2",
+   "VH-OPS-001-Q3",
+   "VH-OPS-002-Q2",
+   "VH-OPS-002-Q3",
+   "VH-FIN-001-Q2",
+   "VH-FIN-001-Q3"
+  ]
+ },
+ "baseline/exec/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,200 leads → 6,300 leads (+50% relative)",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 34% → 21% (-38.2% relative, -13 pp)",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.1 days → 7.8 days (+151.6% relative)",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 4% → 17% (+325% relative, +13 pp)",
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,240,000 → $1,018,000 (-17.9% relative)",
+     "supporting_ids": [
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-cac",
+     "metric": "cac",
+     "label": "Customer acquisition cost",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Customer acquisition cost increased: $118 → $141 (+19.5% relative)",
+     "supporting_ids": [
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "sources": [
+      "SYN-Ads Spend Ledger"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Recognized revenue decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower revenue, for example through delayed recognition.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Recognition timing against shipment dates.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "Recognition timing against shipment dates.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3",
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-MKT-001-Q2",
+   "VH-MKT-001-Q3",
+   "VH-MKT-002-Q2",
+   "VH-MKT-002-Q3",
+   "VH-MKT-003-Q2",
+   "VH-MKT-003-Q3",
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3",
+   "VH-OPS-001-Q2",
+   "VH-OPS-001-Q3",
+   "VH-OPS-002-Q2",
+   "VH-OPS-002-Q3",
+   "VH-FIN-001-Q2",
+   "VH-FIN-001-Q3"
+  ]
+ },
+ "baseline/marketing/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,200 leads → 6,300 leads (+50% relative)",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 34% → 21% (-38.2% relative, -13 pp)",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-cac",
+     "metric": "cac",
+     "label": "Customer acquisition cost",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Customer acquisition cost increased: $118 → $141 (+19.5% relative)",
+     "supporting_ids": [
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "sources": [
+      "SYN-Ads Spend Ledger"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Customer acquisition cost increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-cac"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-lead-quality",
+     "statement": "Possible implication (unverified hypothesis): A lower-intent lead mix may be associated with the drop in lead quality.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "missing_evidence": [
+      "Lead source or channel mix by period.",
+      "Whether the lead scoring definition changed between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-acquisition-cost",
+     "statement": "Possible implication (unverified hypothesis): Growth in lead volume may be associated with a higher cost per acquired customer.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-leads",
+      "F-cac"
+     ],
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "missing_evidence": [
+      "Spend by channel.",
+      "Customers acquired by channel.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Lead source or channel mix by period.",
+    "Whether the lead scoring definition changed between periods.",
+    "Spend by channel.",
+    "Customers acquired by channel.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-leads-vs-lead-quality",
+     "relationship_id": "leads-vs-lead-quality",
+     "title": "Review the channel mix toward higher-quality sources as a two-week test.",
+     "owner": "Marketing",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: A lower-intent lead mix may be associated with the drop in lead quality.",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3",
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-MKT-001-Q2",
+   "VH-MKT-001-Q3",
+   "VH-MKT-002-Q2",
+   "VH-MKT-002-Q3",
+   "VH-MKT-003-Q2",
+   "VH-MKT-003-Q3",
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3"
+  ]
+ },
+ "baseline/marketing/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,200 leads → 6,300 leads (+50% relative)",
+     "supporting_ids": [
+      "VH-MKT-001-Q2",
+      "VH-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 34% → 21% (-38.2% relative, -13 pp)",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-cac",
+     "metric": "cac",
+     "label": "Customer acquisition cost",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Customer acquisition cost increased: $118 → $141 (+19.5% relative)",
+     "supporting_ids": [
+      "VH-MKT-003-Q2",
+      "VH-MKT-003-Q3"
+     ],
+     "sources": [
+      "SYN-Ads Spend Ledger"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VH-MKT-002-Q2",
+      "VH-MKT-002-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-MKT-001-Q2",
+   "VH-MKT-001-Q3",
+   "VH-MKT-002-Q2",
+   "VH-MKT-002-Q3",
+   "VH-MKT-003-Q2",
+   "VH-MKT-003-Q3",
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3"
+  ]
+ },
+ "baseline/ops/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.1 days → 7.8 days (+151.6% relative)",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 4% → 17% (+325% relative, +13 pp)",
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3",
+   "VH-OPS-001-Q2",
+   "VH-OPS-001-Q3",
+   "VH-OPS-002-Q2",
+   "VH-OPS-002-Q3"
+  ]
+ },
+ "baseline/ops/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.5% → 5.4% (-43.2% relative, -4.1 pp)",
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 399 deals → 340 deals (-14.8% relative)",
+     "supporting_ids": [
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.1 days → 7.8 days (+151.6% relative)",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 4% → 17% (+325% relative, +13 pp)",
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3",
+      "VH-SAL-002-Q2",
+      "VH-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VH-OPS-002-Q2",
+      "VH-OPS-002-Q3",
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VH-OPS-001-Q2",
+      "VH-OPS-001-Q3",
+      "VH-SAL-001-Q2",
+      "VH-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VH-SAL-001-Q2",
+   "VH-SAL-001-Q3",
+   "VH-SAL-002-Q2",
+   "VH-SAL-002-Q3",
+   "VH-OPS-001-Q2",
+   "VH-OPS-001-Q3",
+   "VH-OPS-002-Q2",
+   "VH-OPS-002-Q3"
+  ]
+ },
+ "baseline/finance/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,240,000 → $1,018,000 (-17.9% relative)",
+     "supporting_ids": [
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VH-FIN-001-Q2",
+   "VH-FIN-001-Q3"
+  ]
+ },
+ "baseline/finance/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,240,000 → $1,018,000 (-17.9% relative)",
+     "supporting_ids": [
+      "VH-FIN-001-Q2",
+      "VH-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VH-FIN-001-Q2",
+   "VH-FIN-001-Q3"
+  ]
+ },
+ "quality-only/exec/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue",
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,000 leads → 5,600 leads (+40% relative)",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 33% → 24% (-27.3% relative, -9 pp)",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Avg. fulfillment time was flat: 3.1 days → 3.1 days (0% relative)",
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Backorder rate was flat: 4% → 4% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,150,000 → $1,096,000 (-4.7% relative)",
+     "supporting_ids": [
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time was flat and Recognized revenue decreased. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "insufficient_evidence",
+     "verified": false,
+     "claims_causation": false,
+     "statement": "Customer acquisition cost has no verified data in your authorized scope for Q2 2026 → Q3 2026, so this relationship cannot be assessed.",
+     "fact_refs": [
+      "F-leads"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-lead-quality",
+     "statement": "Possible implication (unverified hypothesis): A lower-intent lead mix may be associated with the drop in lead quality.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "missing_evidence": [
+      "Lead source or channel mix by period.",
+      "Whether the lead scoring definition changed between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Lead source or channel mix by period.",
+    "Whether the lead scoring definition changed between periods.",
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "Verified data for Customer acquisition cost.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-leads-vs-lead-quality",
+     "relationship_id": "leads-vs-lead-quality",
+     "title": "Review the channel mix toward higher-quality sources as a two-week test.",
+     "owner": "Marketing",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: A lower-intent lead mix may be associated with the drop in lead quality.",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-MKT-001-Q2",
+   "VQ-MKT-001-Q3",
+   "VQ-MKT-002-Q2",
+   "VQ-MKT-002-Q3",
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3",
+   "VQ-OPS-001-Q2",
+   "VQ-OPS-001-Q3",
+   "VQ-OPS-002-Q2",
+   "VQ-OPS-002-Q3",
+   "VQ-FIN-001-Q2",
+   "VQ-FIN-001-Q3"
+  ]
+ },
+ "quality-only/exec/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,000 leads → 5,600 leads (+40% relative)",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 33% → 24% (-27.3% relative, -9 pp)",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Avg. fulfillment time was flat: 3.1 days → 3.1 days (0% relative)",
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Backorder rate was flat: 4% → 4% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,150,000 → $1,096,000 (-4.7% relative)",
+     "supporting_ids": [
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time was flat and Sales conversion rate decreased. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate was flat and Avg. fulfillment time was flat. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3",
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time was flat and Recognized revenue decreased. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3",
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-MKT-001-Q2",
+   "VQ-MKT-001-Q3",
+   "VQ-MKT-002-Q2",
+   "VQ-MKT-002-Q3",
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3",
+   "VQ-OPS-001-Q2",
+   "VQ-OPS-001-Q3",
+   "VQ-OPS-002-Q2",
+   "VQ-OPS-002-Q3",
+   "VQ-FIN-001-Q2",
+   "VQ-FIN-001-Q3"
+  ]
+ },
+ "quality-only/marketing/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,000 leads → 5,600 leads (+40% relative)",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 33% → 24% (-27.3% relative, -9 pp)",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "insufficient_evidence",
+     "verified": false,
+     "claims_causation": false,
+     "statement": "Customer acquisition cost has no verified data in your authorized scope for Q2 2026 → Q3 2026, so this relationship cannot be assessed.",
+     "fact_refs": [
+      "F-leads"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "leads-vs-lead-quality",
+     "statement": "Possible implication (unverified hypothesis): A lower-intent lead mix may be associated with the drop in lead quality.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "missing_evidence": [
+      "Lead source or channel mix by period.",
+      "Whether the lead scoring definition changed between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Lead source or channel mix by period.",
+    "Whether the lead scoring definition changed between periods.",
+    "Verified data for Customer acquisition cost.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-leads-vs-lead-quality",
+     "relationship_id": "leads-vs-lead-quality",
+     "title": "Review the channel mix toward higher-quality sources as a two-week test.",
+     "owner": "Marketing",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: A lower-intent lead mix may be associated with the drop in lead quality.",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3",
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-MKT-001-Q2",
+   "VQ-MKT-001-Q3",
+   "VQ-MKT-002-Q2",
+   "VQ-MKT-002-Q3",
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3"
+  ]
+ },
+ "quality-only/marketing/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,000 leads → 5,600 leads (+40% relative)",
+     "supporting_ids": [
+      "VQ-MKT-001-Q2",
+      "VQ-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "down",
+     "text": "Lead quality (MQL rate) decreased: 33% → 24% (-27.3% relative, -9 pp)",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) decreased and Sales conversion rate decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "lead-quality-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Lower lead quality may be associated with lower sales conversion.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Conversion by lead source.",
+      "Sales capacity and pricing changes between periods.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Conversion by lead source.",
+    "Sales capacity and pricing changes between periods.",
+    "Pipeline volume by stage.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-lead-quality-vs-conversion",
+     "relationship_id": "lead-quality-vs-conversion",
+     "title": "Pilot a lead-score gate before rep assignment.",
+     "owner": "Sales",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Lower lead quality may be associated with lower sales conversion.",
+     "supporting_ids": [
+      "VQ-MKT-002-Q2",
+      "VQ-MKT-002-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-MKT-001-Q2",
+   "VQ-MKT-001-Q3",
+   "VQ-MKT-002-Q2",
+   "VQ-MKT-002-Q3",
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3"
+  ]
+ },
+ "quality-only/ops/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Avg. fulfillment time was flat: 3.1 days → 3.1 days (0% relative)",
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Backorder rate was flat: 4% → 4% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time was flat and Sales conversion rate decreased. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate was flat and Avg. fulfillment time was flat. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3",
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3",
+   "VQ-OPS-001-Q2",
+   "VQ-OPS-001-Q3",
+   "VQ-OPS-002-Q2",
+   "VQ-OPS-002-Q3"
+  ]
+ },
+ "quality-only/ops/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9% → 6.1% (-32.2% relative, -2.9 pp)",
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 360 deals → 342 deals (-5% relative)",
+     "supporting_ids": [
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Avg. fulfillment time was flat: 3.1 days → 3.1 days (0% relative)",
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "flat",
+     "text": "Backorder rate was flat: 4% → 4% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time was flat and Sales conversion rate decreased. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3",
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate was flat and Avg. fulfillment time was flat. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VQ-OPS-002-Q2",
+      "VQ-OPS-002-Q3",
+      "VQ-OPS-001-Q2",
+      "VQ-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VQ-SAL-001-Q2",
+      "VQ-SAL-001-Q3",
+      "VQ-SAL-002-Q2",
+      "VQ-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-SAL-001-Q2",
+   "VQ-SAL-001-Q3",
+   "VQ-SAL-002-Q2",
+   "VQ-SAL-002-Q3",
+   "VQ-OPS-001-Q2",
+   "VQ-OPS-001-Q3",
+   "VQ-OPS-002-Q2",
+   "VQ-OPS-002-Q3"
+  ]
+ },
+ "quality-only/finance/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,150,000 → $1,096,000 (-4.7% relative)",
+     "supporting_ids": [
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-FIN-001-Q2",
+   "VQ-FIN-001-Q3"
+  ]
+ },
+ "quality-only/finance/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,150,000 → $1,096,000 (-4.7% relative)",
+     "supporting_ids": [
+      "VQ-FIN-001-Q2",
+      "VQ-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VQ-FIN-001-Q2",
+   "VQ-FIN-001-Q3"
+  ]
+ },
+ "ops-only/exec/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue",
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,100 leads → 4,700 leads (+14.6% relative)",
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "flat",
+     "text": "Lead quality (MQL rate) was flat: 33% → 33% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.2 days → 9.1 days (+184.4% relative)",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 5% → 21% (+320% relative, +16 pp)",
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,200,000 → $1,002,000 (-16.5% relative)",
+     "supporting_ids": [
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) was flat. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3",
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) was flat and Sales conversion rate decreased. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Recognized revenue decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "insufficient_evidence",
+     "verified": false,
+     "claims_causation": false,
+     "statement": "Customer acquisition cost has no verified data in your authorized scope for Q2 2026 → Q3 2026, so this relationship cannot be assessed.",
+     "fact_refs": [
+      "F-leads"
+     ],
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower revenue, for example through delayed recognition.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Recognition timing against shipment dates.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "Recognition timing against shipment dates.",
+    "Verified data for Customer acquisition cost.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-MKT-001-Q2",
+   "VO-MKT-001-Q3",
+   "VO-MKT-002-Q2",
+   "VO-MKT-002-Q3",
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3",
+   "VO-OPS-001-Q2",
+   "VO-OPS-001-Q3",
+   "VO-OPS-002-Q2",
+   "VO-OPS-002-Q3",
+   "VO-FIN-001-Q2",
+   "VO-FIN-001-Q3"
+  ]
+ },
+ "ops-only/exec/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,100 leads → 4,700 leads (+14.6% relative)",
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "flat",
+     "text": "Lead quality (MQL rate) was flat: 33% → 33% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.2 days → 9.1 days (+184.4% relative)",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 5% → 21% (+320% relative, +16 pp)",
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,200,000 → $1,002,000 (-16.5% relative)",
+     "supporting_ids": [
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) was flat and Sales conversion rate decreased. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "closed-deals-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Closed deals decreased and Recognized revenue decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-revenue",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Recognized revenue decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "closed-deals-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Fewer closed deals may be associated with lower recognized revenue.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-closed_deals",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Average deal size by period.",
+      "Revenue recognition timing.",
+      "How much each factor contributes (no decomposition exists).",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-revenue",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower revenue, for example through delayed recognition.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-revenue"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "missing_evidence": [
+      "Recognition timing against shipment dates.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Average deal size by period.",
+    "Revenue recognition timing.",
+    "How much each factor contributes (no decomposition exists).",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "Recognition timing against shipment dates.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-closed-deals-vs-revenue",
+     "relationship_id": "closed-deals-vs-revenue",
+     "title": "Re-forecast next quarter with sensitivity ranges.",
+     "owner": "Finance",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Fewer closed deals may be associated with lower recognized revenue.",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3",
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    },
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-MKT-001-Q2",
+   "VO-MKT-001-Q3",
+   "VO-MKT-002-Q2",
+   "VO-MKT-002-Q3",
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3",
+   "VO-OPS-001-Q2",
+   "VO-OPS-001-Q3",
+   "VO-OPS-002-Q2",
+   "VO-OPS-002-Q3",
+   "VO-FIN-001-Q2",
+   "VO-FIN-001-Q3"
+  ]
+ },
+ "ops-only/marketing/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Marketing leads"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,100 leads → 4,700 leads (+14.6% relative)",
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "flat",
+     "text": "Lead quality (MQL rate) was flat: 33% → 33% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "leads-vs-lead-quality",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Marketing leads increased and Lead quality (MQL rate) was flat. The pattern the relationship model looks for (they moved in opposite directions) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-leads",
+      "F-mql_rate"
+     ],
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3",
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "leads-vs-acquisition-cost",
+     "status": "insufficient_evidence",
+     "verified": false,
+     "claims_causation": false,
+     "statement": "Customer acquisition cost has no verified data in your authorized scope for Q2 2026 → Q3 2026, so this relationship cannot be assessed.",
+     "fact_refs": [
+      "F-leads"
+     ],
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [],
+   "missing_evidence": [
+    "Verified data for Customer acquisition cost.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-MKT-001-Q2",
+   "VO-MKT-001-Q3",
+   "VO-MKT-002-Q2",
+   "VO-MKT-002-Q3",
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3"
+  ]
+ },
+ "ops-only/marketing/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-leads",
+     "metric": "leads",
+     "label": "Marketing leads",
+     "domain": "Marketing",
+     "direction": "up",
+     "text": "Marketing leads increased: 4,100 leads → 4,700 leads (+14.6% relative)",
+     "supporting_ids": [
+      "VO-MKT-001-Q2",
+      "VO-MKT-001-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Campaign Export"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-mql_rate",
+     "metric": "mql_rate",
+     "label": "Lead quality (MQL rate)",
+     "domain": "Marketing",
+     "direction": "flat",
+     "text": "Lead quality (MQL rate) was flat: 33% → 33% (0% relative, 0 pp)",
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3"
+     ],
+     "sources": [
+      "SYN-CRM Lead Scoring"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "lead-quality-vs-conversion",
+     "status": "pattern_not_present",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Lead quality (MQL rate) was flat and Sales conversion rate decreased. The pattern the relationship model looks for (both moved the same way) is not present, so no implication is drawn.",
+     "fact_refs": [
+      "F-mql_rate",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-MKT-002-Q2",
+      "VO-MKT-002-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-MKT-001-Q2",
+   "VO-MKT-001-Q3",
+   "VO-MKT-002-Q2",
+   "VO-MKT-002-Q3",
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3"
+  ]
+ },
+ "ops-only/ops/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.2 days → 9.1 days (+184.4% relative)",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 5% → 21% (+320% relative, +16 pp)",
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3",
+   "VO-OPS-001-Q2",
+   "VO-OPS-001-Q3",
+   "VO-OPS-002-Q2",
+   "VO-OPS-002-Q3"
+  ]
+ },
+ "ops-only/ops/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Avg. fulfillment time",
+    "Sales conversion rate",
+    "Closed deals"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-conversion_rate",
+     "metric": "conversion_rate",
+     "label": "Sales conversion rate",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Sales conversion rate decreased: 9.2% → 7% (-23.9% relative, -2.2 pp)",
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-closed_deals",
+     "metric": "closed_deals",
+     "label": "Closed deals",
+     "domain": "Sales",
+     "direction": "down",
+     "text": "Closed deals decreased: 377 deals → 329 deals (-12.7% relative)",
+     "supporting_ids": [
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "sources": [
+      "SYN-Pipeline Snapshot"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-fulfillment_days",
+     "metric": "fulfillment_days",
+     "label": "Avg. fulfillment time",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Avg. fulfillment time increased: 3.2 days → 9.1 days (+184.4% relative)",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Shipment Log"
+     ]
+    },
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-backorder_rate",
+     "metric": "backorder_rate",
+     "label": "Backorder rate",
+     "domain": "Operations",
+     "direction": "up",
+     "text": "Backorder rate increased: 5% → 21% (+320% relative, +16 pp)",
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3"
+     ],
+     "sources": [
+      "SYN-WMS Inventory Report"
+     ]
+    }
+   ],
+   "relationships": [
+    {
+     "kind": "relationship",
+     "id": "conversion-vs-closed-deals",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Sales conversion rate decreased and Closed deals decreased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "fulfillment-vs-conversion",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Avg. fulfillment time increased and Sales conversion rate decreased: they moved in opposite directions. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ]
+    },
+    {
+     "kind": "relationship",
+     "id": "backorders-vs-fulfillment",
+     "status": "co_movement_observed",
+     "verified": true,
+     "claims_causation": false,
+     "statement": "In Q2 2026 → Q3 2026, Backorder rate increased and Avg. fulfillment time increased: both moved the same way. This is co-movement across two periods only; it does not show that either change affects the other.",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ]
+    }
+   ],
+   "hypotheses": [
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "conversion-vs-closed-deals",
+     "statement": "Possible implication (unverified hypothesis): Lower conversion may be reflected in fewer closed deals.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-conversion_rate",
+      "F-closed_deals"
+     ],
+     "supporting_ids": [
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3",
+      "VO-SAL-002-Q2",
+      "VO-SAL-002-Q3"
+     ],
+     "missing_evidence": [
+      "Pipeline volume by stage.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "fulfillment-vs-conversion",
+     "statement": "Possible implication (unverified hypothesis): Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "plausibility": "Low",
+     "fact_refs": [
+      "F-fulfillment_days",
+      "F-conversion_rate"
+     ],
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "missing_evidence": [
+      "Order abandonment records.",
+      "Whether delivery times are shown at quote time.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    },
+    {
+     "kind": "hypothesis",
+     "verified": false,
+     "claims_causation": false,
+     "relationship_id": "backorders-vs-fulfillment",
+     "statement": "Possible implication (unverified hypothesis): Higher backorders may be associated with longer fulfillment times.",
+     "plausibility": "Medium",
+     "fact_refs": [
+      "F-backorder_rate",
+      "F-fulfillment_days"
+     ],
+     "supporting_ids": [
+      "VO-OPS-002-Q2",
+      "VO-OPS-002-Q3",
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3"
+     ],
+     "missing_evidence": [
+      "Backorders by SKU family.",
+      "Supplier lead times.",
+      "A longer history than two periods (no trend or seasonal baseline)."
+     ]
+    }
+   ],
+   "missing_evidence": [
+    "Pipeline volume by stage.",
+    "Order abandonment records.",
+    "Whether delivery times are shown at quote time.",
+    "Backorders by SKU family.",
+    "Supplier lead times.",
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [
+    {
+     "kind": "proposed_action",
+     "id": "ACT-fulfillment-vs-conversion",
+     "relationship_id": "fulfillment-vs-conversion",
+     "title": "Show stock ETA at quote time and review backordered SKUs.",
+     "owner": "Operations",
+     "rationale": "Suggested on the basis of an unverified hypothesis, not a finding: Longer fulfillment may be associated with lower conversion if buyers hesitate over delivery times.",
+     "supporting_ids": [
+      "VO-OPS-001-Q2",
+      "VO-OPS-001-Q3",
+      "VO-SAL-001-Q2",
+      "VO-SAL-001-Q3"
+     ],
+     "requires_human_approval": true,
+     "executable": false
+    }
+   ],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval."
+   ]
+  },
+  "authorizedIds": [
+   "VO-SAL-001-Q2",
+   "VO-SAL-001-Q3",
+   "VO-SAL-002-Q2",
+   "VO-SAL-002-Q3",
+   "VO-OPS-001-Q2",
+   "VO-OPS-001-Q3",
+   "VO-OPS-002-Q2",
+   "VO-OPS-002-Q3"
+  ]
+ },
+ "ops-only/finance/revenueVsLeads": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [
+    "Recognized revenue"
+   ],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,200,000 → $1,002,000 (-16.5% relative)",
+     "supporting_ids": [
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VO-FIN-001-Q2",
+   "VO-FIN-001-Q3"
+  ]
+ },
+ "ops-only/finance/fulfillmentVsSales": {
+  "state": "ok",
+  "impact": {
+   "kind": "business_impact_map",
+   "period": "Q2 2026 → Q3 2026",
+   "focus": [],
+   "verified_changes": [
+    {
+     "kind": "verified_change",
+     "verified": true,
+     "fact_id": "F-revenue",
+     "metric": "revenue",
+     "label": "Recognized revenue",
+     "domain": "Finance",
+     "direction": "down",
+     "text": "Recognized revenue decreased: $1,200,000 → $1,002,000 (-16.5% relative)",
+     "supporting_ids": [
+      "VO-FIN-001-Q2",
+      "VO-FIN-001-Q3"
+     ],
+     "sources": [
+      "SYN-GL Revenue Summary"
+     ]
+    }
+   ],
+   "relationships": [],
+   "hypotheses": [],
+   "missing_evidence": [
+    "A longer history than two periods (no trend or seasonal baseline)."
+   ],
+   "proposed_actions": [],
+   "notices": [
+    "Relationships are co-movements between two periods of verified metrics. They do not show that one metric affects another.",
+    "Hypotheses are unverified possibilities from the configured relationship model. Nothing here establishes why a metric changed.",
+    "Proposed actions are suggestions only. None can run without human approval.",
+    "No relationship in the model could be assessed for this question within your authorized scope."
+   ]
+  },
+  "authorizedIds": [
+   "VO-FIN-001-Q2",
+   "VO-FIN-001-Q3"
+  ]
+ }
+}

@@ -6,6 +6,7 @@ import { computeAuthorizedFacts } from "../core/facts";
 import { DEMO_TENANT_ID, METRIC_LABELS, ROLES, SCENARIOS, build, type EvidenceRecord } from "../data";
 import { PROTOTYPE_CONTEXT, DEMO_QUESTION, filterVisible } from "../engine";
 import { authorizeDemo, demoAccessPolicy, demoActorId, demoEvidenceStore, demoIdentity, resolveDemoRequest, type PrototypeEvidence } from "../prototypeAdapter";
+import { museSpark } from "./providers/muse";
 import { PROTOTYPE_RUNTIME, authorizedFactsBlockReason, runMeta, type EngineRuntime } from "./adapter.server";
 import { authorizedRecords, prepareMessages, validateAuthorizedOutput } from "./contract";
 import { buildAuthorizedFacts } from "./numericGrounding";
@@ -53,6 +54,7 @@ const runtime = (over: Partial<EngineRuntime> = {}, actorId = "acme-analyst"): E
   policy: permitAll,
   analysis: PROTOTYPE_CONTEXT,
   question: DEMO_QUESTION,
+  provider: museSpark,
   ...over,
 });
 const BRAVO_STRINGS = [...new Set(bravoRecords.flatMap((r) => [r.id, r.source]))].filter((s) => !acmeRecords.some((a) => a.id === s));
@@ -321,7 +323,7 @@ function authorizeEvidenceFor2(candidates: PrototypeEvidence[]) {
 }
 
 describe("structure: the live path cannot reach raw evidence", () => {
-  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, " ");
   const adapter = strip(readFileSync("src/lib/athena/meta/adapter.server.ts", "utf8"));
   const runMetaBody = adapter.slice(adapter.indexOf("export async function runMeta"));
   it("runMeta uses only the authorization-checked stages", () => {

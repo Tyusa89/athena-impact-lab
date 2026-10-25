@@ -4,6 +4,7 @@ import { createIdentityBoundary, type IdentityVerifier, type VerifiedIdentity } 
 import { DEMO_TENANT_ID, METRIC_LABELS, ROLES, SCENARIOS, build } from "../data";
 import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
 import { authorizeDemo, demoAccessPolicy, demoActorId, demoEvidenceStore, demoIdentity, resolveDemoRequest, simulatedDemoVerifier, type PrototypeEvidence } from "../prototypeAdapter";
+import { museSpark } from "./providers/muse";
 import { PROTOTYPE_RUNTIME, runMeta, type EngineRuntime } from "./adapter.server";
 
 // PR B-2: the identity boundary. No network: fetch is always a local fake. The "identity provider" is a stand-in verifier.
@@ -34,6 +35,7 @@ const runtimeFor = (token: unknown, over: Partial<EngineRuntime> = {}): EngineRu
   policy: grantAll,
   analysis: PROTOTYPE_CONTEXT,
   question: DEMO_QUESTION,
+  provider: museSpark,
   ...over,
 });
 
@@ -213,7 +215,7 @@ describe("6. identity verification unavailable: fail closed", () => {
     expect(f).not.toHaveBeenCalled();
   });
   it("key/flag checks still come first and request validation errors are unchanged", async () => {
-    expect(await runMeta({}, { META_MODEL_API_KEY: "", META_MODEL_ENABLED: "true" }, reply(lane("x")) as never, runtimeFor("token-acme-analyst"))).toMatchObject({ state: "blocked", reason: expect.stringContaining("META_MODEL_API_KEY") });
+    expect(await runMeta({}, { META_MODEL_API_KEY: "", META_MODEL_ENABLED: "true" }, reply(lane("x")) as never, runtimeFor("token-acme-analyst"))).toMatchObject({ state: "blocked", reason: "Meta API server credential is not configured." });
     expect(await runMeta(claim("root"), READY, reply(lane("x")) as never)).toMatchObject({ state: "blocked", reason: "Invalid request: Unknown role" });
   });
 });

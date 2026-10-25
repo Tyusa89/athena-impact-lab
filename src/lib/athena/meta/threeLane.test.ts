@@ -31,9 +31,9 @@ describe("verified findings are server-rendered, deterministic and independent o
     expect(r.findings).toMatchObject(expected);
     expect(r.findings.find((f) => f.fact_id === "F-revenue")!.text).toBe("Recognized revenue decreased: $1,240,000 → $1,018,000 (-17.9% relative)");
   });
-  it("are identical whatever the model says, including contradictory prose", async () => {
+  it("are identical whatever the (valid) model says", async () => {
     const a = await run(lanes("Demand may be shifting.", ["F-revenue"]));
-    const b = await run(lanes("Revenue rose sharply and everything is improving.", ["F-revenue"]));
+    const b = await run(lanes("Pricing, seasonality and channel mix may all be involved.", ["F-revenue", "F-leads"]));
     expect(a.state === "ok" && b.state === "ok").toBe(true);
     if (a.state === "ok" && b.state === "ok") expect(b.findings).toEqual(a.findings);
   });
@@ -126,19 +126,23 @@ describe("wrong-subject and magnitude-by-number attacks are rejected (model text
 
 describe("unauthorized and malformed references are rejected", () => {
   it("finance cannot reference a marketing fact", async () => {
-    expect(await rejected(lanes("Leads may matter.", ["F-leads"]), "finance")).toContain("Unknown or unauthorized fact reference: F-leads");
+    expect(await rejected(lanes("Leads may matter.", ["F-leads"]), "finance")).toContain("Unknown or unauthorized fact reference");
   });
   it("marketing cannot reference a finance fact", async () => {
-    expect(await rejected(lanes("Revenue may matter.", ["F-revenue"]), "marketing")).toContain("Unknown or unauthorized fact reference: F-revenue");
+    expect(await rejected(lanes("Revenue may matter.", ["F-revenue"]), "marketing")).toContain("Unknown or unauthorized fact reference");
   });
   it("one unauthorized ref among authorized ones rejects the item", async () => {
-    expect(await rejected(lanes("Mix may matter.", ["F-revenue", "F-leads"]), "finance")).toContain("F-leads");
+    const e = await rejected(lanes("Mix may matter.", ["F-revenue", "F-leads"]), "finance");
+    expect(e).toContain("Unknown or unauthorized fact reference");
+    expect(e).not.toContain("F-leads"); // the hidden fact id is never echoed
   });
   it("a record id is not a fact reference", async () => {
     expect(await rejected(lanes("Revenue may matter.", ["VH-FIN-001-Q3"]))).toContain("Unknown or unauthorized fact reference");
   });
   it("unknown fact ids, empty refs and too many refs fail", async () => {
-    expect(await rejected(lanes("x may matter.", ["F-nope"]))).toContain("F-nope");
+    const e = await rejected(lanes("x may matter.", ["F-nope"]));
+    expect(e).toContain("Unknown or unauthorized fact reference");
+    expect(e).not.toContain("F-nope");
     expect((await run(lanes("x may matter.", []))).state).toBe("rejected");
     expect((await run(lanes("x may matter.", Array(LIMITS.refs + 1).fill("F-revenue")))).state).toBe("rejected");
   });
@@ -260,26 +264,23 @@ describe("request format", () => {
   });
 });
 
-// Documented semantic limitations. These pin CURRENT behaviour so Phase 2B-2 (lexicon guards) flips them deliberately.
-describe("KNOWN LIMITATIONS (not guarded until Phase 2B-2)", () => {
-  it("contradictory prose inside an interpretation is accepted, but stays unverified and cannot alter the verified findings", async () => {
-    const r = await run(lanes("Revenue rose sharply.", ["F-revenue"]));
-    expect(r.state).toBe("ok");
-    if (r.state !== "ok") return;
-    expect(r.output.interpretations[0]!.verified).toBe(false);
-    const rev = r.findings.find((f) => f.fact_id === "F-revenue")!;
-    expect(rev.direction).toBe("down");
-    expect(rev.text).toContain("decreased");
+// Phase 2B-2 flipped the former limitations below into rejections (see semanticGuards.test.ts for the full suite).
+// Only forms the guards deliberately do not cover remain pinned here.
+describe("semantic guards: former limitations are now rejected; residual gaps stay pinned", () => {
+  it("contradictory prose in an interpretation is rejected before it can reach the UI", async () => {
+    expect(await rejected(lanes("Revenue rose sharply.", ["F-revenue"]))).toContain("Semantic guard (direction)");
   });
   it.each([
-    ["spelled-out number", "Revenue fell forty percent."],
-    ["magnitude word", "Revenue doubled."],
-    ["fraction word", "Revenue halved versus the prior period."],
-    ["CJK numeral", "Revenue fell 四十."],
-  ])("%s is not yet rejected", async (_n, text) => {
-    expect((await run(lanes(text, ["F-revenue"]))).state).toBe("ok");
+    ["spelled-out percent", "Revenue fell forty percent."],
+    ["multiple", "Revenue doubled."],
+    ["half", "Revenue halved versus the prior period."],
+  ])("%s is rejected as an unsupported magnitude", async (_n, text) => {
+    expect(await rejected(lanes(text, ["F-revenue"]))).toContain("Semantic guard (magnitude)");
   });
-  it("prose about an unauthorized domain is not yet rejected (finance mentioning lead volume)", async () => {
-    expect((await run(lanes("Lead volume may be rising while conversion softens.", ["F-revenue"]), "finance")).state).toBe("ok");
+  it("a directional claim about an unauthorized domain is rejected (finance mentioning lead volume)", async () => {
+    expect(await rejected(lanes("Lead volume may be rising while conversion softens.", ["F-revenue"]), "finance")).toContain("Semantic guard (domain)");
+  });
+  it("RESIDUAL: CJK numerals are still not recognised", async () => {
+    expect((await run(lanes("Revenue fell \u56DB\u5341.", ["F-revenue"]))).state).toBe("ok");
   });
 });

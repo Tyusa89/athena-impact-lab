@@ -19,6 +19,10 @@ export interface VerifiedFact {
   direction: "up" | "down" | "flat";
 }
 
+/** Invisible / formatting characters that can split or hide text: soft hyphen, combining grapheme joiner, Arabic letter mark,
+ * Hangul/Khmer/Mongolian fillers, zero-width and bidi controls, word joiner and invisible operators, variation selectors, BOM. */
+export const INVISIBLE_CHARS = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+
 export const factIdFor = (m: MetricKey) => `F-${m}`;
 
 /** Verified facts from authorized records only, via the engine's own computeFacts (one fact per metric). */
@@ -78,13 +82,13 @@ export function nonAsciiNumerics(text: string, recordIds: readonly string[]): st
   return (scannable(text, recordIds).match(/\p{N}/gu) ?? []).filter((ch) => !/^[0-9]$/.test(ch));
 }
 
-/** Strict numeral rule: model-authored text may contain no numerals (record ids, Q1-Q4 labels and years are exempt). */
+/** Strict numeral rule: model-authored text may contain no numerals (record ids, Q1-Q4 labels and reporting-period references are exempt).
+ * Messages never quote the text, so they cannot echo an identifier the model wrote. */
 export function verifyNoNumerals(text: string, recordIds: readonly string[]): string[] {
   const errs: string[] = [];
-  const shown = text.slice(0, 40);
   const odd = nonAsciiNumerics(text, recordIds);
-  if (odd.length) errs.push(`Non-ASCII numeric character(s) ${odd.slice(0, 3).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(",")} in text "${shown}": rejected`);
+  if (odd.length) errs.push(`Non-ASCII numeric character(s) ${odd.slice(0, 3).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(",")} in model text: rejected`);
   const nums = numericTokens(text, recordIds);
-  if (nums.length) errs.push(`Numeral ${nums[0]} not allowed in model text "${shown}": numbers appear only in Athena-computed findings`);
+  if (nums.length) errs.push(`Numeral ${nums[0]} not allowed in model text: numbers appear only in Athena-computed findings`);
   return errs;
 }

@@ -88,7 +88,9 @@ describe("meta output validation", () => {
   it("hallucinated fact reference rejected", async () => {
     const o = good(finId()); o.interpretations[0]!.refs = ["F-fake-999"];
     const r = await runMeta(req("finance"), READY, mockFetch(o) as never);
-    expect(r.state).toBe("rejected"); if (r.state === "rejected") expect(r.errors.join()).toContain("F-fake-999");
+    expect(r.state).toBe("rejected");
+    // the rejection is generic: the unknown reference the model supplied is never echoed back
+    if (r.state === "rejected") { expect(r.errors.join()).toContain("Unknown or unauthorized fact reference"); expect(JSON.stringify(r)).not.toContain("F-fake-999"); }
   });
   it("referencing a real but unauthorized fact is rejected (cross-workspace)", async () => {
     const hidden = SCENARIOS[0]!.records.find((x) => x.workspace === "ws-marketing")!.id;

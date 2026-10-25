@@ -1,49 +1,21 @@
 // Authorization interface and enforcement for evidence. Pure and dependency-free (no I/O, no authentication, no storage).
 //
-//   TrustedContext   who is asking and for which tenant. Only the server's identity layer may mint one (`issueTrustedContext`),
-//                    after it has verified a credential. Plain objects, copies and parsed JSON are never accepted.
-//   AccessPolicy     decides, for a trusted context, which evidence may be used (an `EvidenceScope`).
-//   EvidenceStore    supplies the candidate evidence for a request. It is NOT trusted to have filtered anything.
-//   authorizeEvidence the single choke point: tenant isolation is enforced here regardless of what the policy or store did,
-//                    and the result is a branded, frozen `AuthorizedEvidence` that the fact and prompt stages require.
+//   TrustedContext     who is asking and for which tenant. Produced only by an IdentityBoundary (./identity) from a verified credential;
+//                      there is no way to build one from a tenant id and an actor id.
+//   AccessPolicy       decides, for a trusted context, which evidence may be used (an `EvidenceScope`).
+//   EvidenceStore      supplies the candidate evidence for a request. It is NOT trusted to have filtered anything.
+//   authorizeEvidence  the single choke point: it accepts a context only from the identity boundary it is given, enforces tenant isolation
+//                      itself, and returns a branded, frozen `AuthorizedEvidence` that the fact and prompt stages require.
 //
 // This establishes interfaces and server-side enforcement points. It is not authentication, not database-level tenant isolation,
-// and not a statement that the engine is ready for sensitive customer records.
+// and not a statement that the engine is ready for sensitive customer records. See ./identity for what the identity boundary does and does not do.
 import type { Evidence } from "./evidence";
+import { AuthorizationError, type IdentityBoundary, type TrustedContext } from "./identity";
 
-/** Raised for any authorization failure. The message is deliberately generic: it never names tenants, actors, records or sources. */
-export class AuthorizationError extends Error {
-  constructor() {
-    super("Authorization failed");
-    this.name = "AuthorizationError";
-  }
-}
-
-declare const TRUSTED: unique symbol;
+export { AuthorizationError };
+export type { Assurance, IdentityBoundary, IdentityVerifier, TrustedContext, VerifiedIdentity } from "./identity";
 declare const AUTHORIZED: unique symbol;
-
-/** A tenant and actor established by the server's identity layer. Never construct one from client input, model output or JSON. */
-export interface TrustedContext {
-  readonly [TRUSTED]: true;
-  readonly tenantId: string;
-  readonly actorId: string;
-}
-
-const issued = new WeakSet<object>();
 const nonEmpty = (s: unknown): s is string => typeof s === "string" && s.length > 0 && s.trim() === s;
-
-/**
- * Mint a trusted context. SERVER-SIDE ONLY: call it from the identity layer after it has verified who the caller is and which
- * tenant they belong to (a session, a signed token, ...). The ids must come from that verification, never from request fields
- * the caller controls. The result is frozen and remembered, so a forged lookalike is refused by `authorizeEvidence`.
- */
-export function issueTrustedContext(tenantId: string, actorId: string): TrustedContext {
-  if (!nonEmpty(tenantId) || !nonEmpty(actorId)) throw new AuthorizationError();
-  const ctx = Object.freeze({ tenantId, actorId }) as unknown as TrustedContext;
-  issued.add(ctx);
-  return ctx;
-}
-export const isTrustedContext = (x: unknown): x is TrustedContext => typeof x === "object" && x !== null && issued.has(x);
 
 /** The evidence one trusted context may use. */
 export interface EvidenceScope<E extends Evidence = Evidence> {
@@ -56,7 +28,8 @@ export interface AccessPolicy<E extends Evidence = Evidence> {
   evidenceScope(ctx: TrustedContext): EvidenceScope<E>;
 }
 /** Supplies candidate evidence. It may return more than the caller may see (for example other tenants' records in a shared fixture);
- * everything it returns is filtered by `authorizeEvidence`. `dataset` is an opaque selector chosen by the server, not the client. */
+ * everything it returns is filtered by `authorizeEvidence`. `dataset` is an opaque selector that the server's request resolver has validated
+ * against a server-side allowlist; the store must never treat it as a path, a query or a tenant. */
 export interface EvidenceStore<E extends Evidence = Evidence> {
   candidates(ctx: TrustedContext, dataset: string): readonly E[];
 }
@@ -85,15 +58,15 @@ const wellFormed = (e: unknown): e is Evidence => {
 
 /**
  * Select the evidence a trusted context may use.
- *  1. The context must have been issued by `issueTrustedContext`.
+ *  1. The context must have been produced by the given identity boundary (not a copy, parsed JSON, or another boundary's context).
  *  2. The policy's scope must be for the context's own tenant.
  *  3. A candidate is kept only if it belongs to the context's tenant (checked here, independent of the policy and the store)
  *     AND the scope permits it with exactly `true`.
  *  4. Any error from the policy or store fails closed with a generic `AuthorizationError`.
  * Malformed candidates (no id/tenant) are withheld, never authorized.
  */
-export function authorizeEvidence<E extends Evidence>(ctx: TrustedContext, policy: AccessPolicy<E>, candidates: readonly E[]): AuthorizationResult<E> {
-  if (!isTrustedContext(ctx)) throw new AuthorizationError();
+export function authorizeEvidence<E extends Evidence>(identity: IdentityBoundary, ctx: TrustedContext, policy: AccessPolicy<E>, candidates: readonly E[]): AuthorizationResult<E> {
+  if (!identity.owns(ctx)) throw new AuthorizationError();
   let scope: EvidenceScope<E>;
   try {
     scope = policy.evidenceScope(ctx);

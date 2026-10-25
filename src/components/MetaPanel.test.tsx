@@ -20,7 +20,7 @@ function deferred<T>() {
 }
 const ok = (text: string): MetaResult => ({
   state: "ok", requestSent: true, authorizedIds: ["R1"],
-  output: { observations: [{ text, cited_ids: ["R1"] }], hypotheses: [], missing_evidence: [], recommendations: [] },
+  output: { observations: [{ text, cited_ids: ["R1"], claims: [] }], hypotheses: [], missing_evidence: [], recommendations: [] },
 });
 
 const scenario = SCENARIOS[0]!;

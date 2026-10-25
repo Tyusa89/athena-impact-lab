@@ -11,6 +11,7 @@
 import { z } from "zod";
 import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
+import { ClaimSchema, MAX_CLAIMS_PER_ITEM, buildVerifiedFacts, verifyItem } from "./numericGrounding";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
@@ -18,7 +19,7 @@ export const MAX_INPUT_TOKENS = 3000;
 /** Hard server cap sent as max_tokens. Includes hidden reasoning tokens. */
 export const MAX_OUTPUT_TOKENS = 2000;
 export const REASONING_EFFORT = "minimal" as const;
-export const LIMITS = { observations: 5, hypotheses: 3, missing: 4, recommendations: 3, text: 200, ids: 6 } as const;
+export const LIMITS = { observations: 5, hypotheses: 3, missing: 4, recommendations: 3, text: 200, ids: 6, claims: MAX_CLAIMS_PER_ITEM } as const;
 export const REQUEST_TIMEOUT_MS = 30_000;
 /** Synthetic-only allowlist: only these bundled scenario IDs can ever be sent. */
 export const SYNTHETIC_SCENARIO_ALLOWLIST: readonly string[] = SCENARIOS.map((s) => s.id);
@@ -48,18 +49,31 @@ export type MetaRequest = z.infer<typeof RequestSchema>;
 
 const ids = z.array(z.string()).min(1).max(LIMITS.ids);
 const txt = z.string().min(1).max(LIMITS.text);
+/** Optional for backward compatibility: omitted means "no numeric claims", and then no numbers may appear in text. */
+const claims = z.array(ClaimSchema).max(LIMITS.claims).default([]);
 export const OutputSchema = z
   .object({
-    observations: z.array(z.object({ text: txt, cited_ids: ids }).strict()).max(LIMITS.observations),
-    hypotheses: z.array(z.object({ text: txt, verified: z.literal(false), cited_ids: ids }).strict()).max(LIMITS.hypotheses),
+    observations: z.array(z.object({ text: txt, cited_ids: ids, claims }).strict()).max(LIMITS.observations),
+    hypotheses: z.array(z.object({ text: txt, verified: z.literal(false), cited_ids: ids, claims }).strict()).max(LIMITS.hypotheses),
     missing_evidence: z.array(txt).max(LIMITS.missing),
-    recommendations: z.array(z.object({ text: txt, requires_human_approval: z.literal(true), cited_ids: ids }).strict()).max(LIMITS.recommendations),
+    recommendations: z.array(z.object({ text: txt, requires_human_approval: z.literal(true), cited_ids: ids, claims }).strict()).max(LIMITS.recommendations),
   })
   .strict();
 export type MetaOutput = z.infer<typeof OutputSchema>;
 
 const T = { type: "string", maxLength: LIMITS.text } as const;
 const I = { type: "array", minItems: 1, maxItems: LIMITS.ids, items: { type: "string" } } as const;
+/** Mirrors ClaimSchema. Required in the format sent to the model (an empty array means "no numeric claims"). */
+const C = {
+  type: "array", maxItems: LIMITS.claims,
+  items: {
+    type: "object", additionalProperties: false, required: ["fact_id", "metric", "kind", "value", "unit"],
+    properties: {
+      fact_id: { type: "string" }, metric: { type: "string" }, kind: { type: "string", enum: ["level", "change_pct", "change_pp"] },
+      period: { type: "string", enum: ["prior", "current"] }, value: { type: "number" }, unit: { type: "string" }, direction: { type: "string", enum: ["up", "down", "flat"] },
+    },
+  },
+} as const;
 /** JSON schema sent as response_format (mirrors OutputSchema). */
 export const RESPONSE_FORMAT = {
   type: "json_schema",
@@ -70,10 +84,10 @@ export const RESPONSE_FORMAT = {
       additionalProperties: false,
       required: ["observations", "hypotheses", "missing_evidence", "recommendations"],
       properties: {
-        observations: { type: "array", maxItems: LIMITS.observations, items: { type: "object", additionalProperties: false, required: ["text", "cited_ids"], properties: { text: T, cited_ids: I } } },
-        hypotheses: { type: "array", maxItems: LIMITS.hypotheses, items: { type: "object", additionalProperties: false, required: ["text", "verified", "cited_ids"], properties: { text: T, verified: { type: "boolean", enum: [false] }, cited_ids: I } } },
+        observations: { type: "array", maxItems: LIMITS.observations, items: { type: "object", additionalProperties: false, required: ["text", "cited_ids", "claims"], properties: { text: T, cited_ids: I, claims: C } } },
+        hypotheses: { type: "array", maxItems: LIMITS.hypotheses, items: { type: "object", additionalProperties: false, required: ["text", "verified", "cited_ids", "claims"], properties: { text: T, verified: { type: "boolean", enum: [false] }, cited_ids: I, claims: C } } },
         missing_evidence: { type: "array", maxItems: LIMITS.missing, items: T },
-        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "cited_ids"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, cited_ids: I } } },
+        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "cited_ids", "claims"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, cited_ids: I, claims: C } } },
       },
     },
   },
@@ -92,10 +106,14 @@ export function buildMessages(question: string, records: EvidenceRecord[]) {
     "You analyse SYNTHETIC business records for a fictional company. Use ONLY the records provided. " +
     "Cite record ids exactly as given in cited_ids. Never cite ids not in the input. Do not claim causation or proof; " +
     "hypotheses are unverified co-movement. Recommendations are proposals that require human approval; you cannot execute actions. " +
+    "VERIFIED_FACTS are precomputed by the server; copy their values exactly and never compute your own. " +
+    "Every number you state must be a claim {fact_id, metric, kind, period (level only), value, unit, direction (change kinds only)} " +
+    "copied from one fact (kind level: prior/current value in the fact's unit; change_pct: unit '%'; change_pp: unit 'pp'), and the item's cited_ids must include that fact's record ids. " +
+    "Do not write any digits in text other than a claim's value; use claims: [] when stating no number. " +
     "If evidence is missing, list it in missing_evidence. BE TERSE: at most " + `${LIMITS.observations} observations, ${LIMITS.hypotheses} hypotheses, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
   return [
     { role: "system" as const, content: system },
-    { role: "user" as const, content: `Question: ${question}\nRecords (JSON): ${JSON.stringify(rows)}` },
+    { role: "user" as const, content: `Question: ${question}\nRecords (JSON): ${JSON.stringify(rows)}\nVERIFIED_FACTS (JSON): ${JSON.stringify(buildVerifiedFacts(records))}` },
   ];
 }
 
@@ -123,7 +141,7 @@ export function hasCausalClaim(text: string, allowInvestigative: boolean): boole
 
 export type ValidationResult = { ok: true; output: MetaOutput } | { ok: false; errors: string[] };
 
-/** Strict output gate: schema, citation provenance, cross-workspace leaks, causal claims. */
+/** Strict output gate: schema, citation provenance, cross-workspace leaks, causal claims, numerical grounding. */
 export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[]): ValidationResult {
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return { ok: false, errors: ["Output is not valid JSON"] }; }
@@ -144,5 +162,10 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
     ...out.recommendations.map((x) => [x.text, true] as [string, boolean]),
   ];
   for (const [t, inv] of causalChecks) if (hasCausalClaim(t, inv)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
+  // Numerical grounding: claims must match server-verified facts exactly; numbers in text must be claim-backed.
+  const facts = buildVerifiedFacts(authorized);
+  const recordIds = allRecords.map((r) => r.id);
+  for (const item of [...out.observations, ...out.hypotheses, ...out.recommendations]) errors.push(...verifyItem(item, facts, recordIds));
+  for (const t of out.missing_evidence) errors.push(...verifyItem({ text: t }, facts, recordIds));
   return errors.length ? { ok: false, errors } : { ok: true, output: out };
 }

@@ -9,9 +9,10 @@
 // accepts minimal|low|medium|high; "none" returns HTTP 400 for Muse Spark; default effort is not documented.
 // NOT verified: pricing.
 import { z } from "zod";
-import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
+import { PERIODS, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
 import { filterVisible } from "../engine";
-import { ClaimSchema, MAX_CLAIMS_PER_ITEM, buildVerifiedFacts, verifyItem } from "./numericGrounding";
+import { renderFindings, type VerifiedFinding } from "./findings";
+import { buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
@@ -19,7 +20,7 @@ export const MAX_INPUT_TOKENS = 3000;
 /** Hard server cap sent as max_tokens. Includes hidden reasoning tokens. */
 export const MAX_OUTPUT_TOKENS = 2000;
 export const REASONING_EFFORT = "minimal" as const;
-export const LIMITS = { observations: 5, hypotheses: 3, missing: 4, recommendations: 3, text: 200, ids: 6, claims: MAX_CLAIMS_PER_ITEM } as const;
+export const LIMITS = { interpretations: 3, missing: 4, recommendations: 3, text: 200, refs: 4 } as const;
 export const REQUEST_TIMEOUT_MS = 30_000;
 /** Synthetic-only allowlist: only these bundled scenario IDs can ever be sent. */
 export const SYNTHETIC_SCENARIO_ALLOWLIST: readonly string[] = SCENARIOS.map((s) => s.id);
@@ -47,47 +48,42 @@ export const RequestSchema = z.object({
 });
 export type MetaRequest = z.infer<typeof RequestSchema>;
 
-const ids = z.array(z.string()).min(1).max(LIMITS.ids);
+// Three lanes. Verified findings are NOT part of the model output: Athena renders them server-side from verified facts.
+// The model supplies only unverified interpretations and human-approval-gated proposals, each pointing at fact ids.
+// There are deliberately no observations, numeric claims or record citations in this contract (hard switch from v1).
+const refs = z.array(z.string().min(1).max(40)).min(1).max(LIMITS.refs);
 const txt = z.string().min(1).max(LIMITS.text);
-/** Optional for backward compatibility: omitted means "no numeric claims", and then no numbers may appear in text. */
-const claims = z.array(ClaimSchema).max(LIMITS.claims).default([]);
 export const OutputSchema = z
   .object({
-    observations: z.array(z.object({ text: txt, cited_ids: ids, claims }).strict()).max(LIMITS.observations),
-    hypotheses: z.array(z.object({ text: txt, verified: z.literal(false), cited_ids: ids, claims }).strict()).max(LIMITS.hypotheses),
+    interpretations: z.array(z.object({ text: txt, verified: z.literal(false), refs }).strict()).max(LIMITS.interpretations),
     missing_evidence: z.array(txt).max(LIMITS.missing),
-    recommendations: z.array(z.object({ text: txt, requires_human_approval: z.literal(true), cited_ids: ids, claims }).strict()).max(LIMITS.recommendations),
+    recommendations: z.array(z.object({ text: txt, requires_human_approval: z.literal(true), refs }).strict()).max(LIMITS.recommendations),
   })
   .strict();
-export type MetaOutput = z.infer<typeof OutputSchema>;
+/** Exactly what the model may send. */
+export type ModelOutput = z.infer<typeof OutputSchema>;
+/** Validated model output enriched server-side: citations are derived from the referenced verified facts, never from the model. */
+export type MetaOutput = {
+  interpretations: { text: string; verified: false; refs: string[]; supporting_ids: string[] }[];
+  missing_evidence: string[];
+  recommendations: { text: string; requires_human_approval: true; refs: string[]; supporting_ids: string[] }[];
+};
 
 const T = { type: "string", maxLength: LIMITS.text } as const;
-const I = { type: "array", minItems: 1, maxItems: LIMITS.ids, items: { type: "string" } } as const;
-/** Mirrors ClaimSchema. Required in the format sent to the model (an empty array means "no numeric claims"). */
-const C = {
-  type: "array", maxItems: LIMITS.claims,
-  items: {
-    type: "object", additionalProperties: false, required: ["fact_id", "metric", "kind", "value", "unit"],
-    properties: {
-      fact_id: { type: "string" }, metric: { type: "string" }, kind: { type: "string", enum: ["level", "change_pct", "change_pp"] },
-      period: { type: "string", enum: ["prior", "current"] }, value: { type: "number" }, unit: { type: "string" }, direction: { type: "string", enum: ["up", "down", "flat"] },
-    },
-  },
-} as const;
+const R = { type: "array", minItems: 1, maxItems: LIMITS.refs, items: { type: "string" } } as const;
 /** JSON schema sent as response_format (mirrors OutputSchema). */
 export const RESPONSE_FORMAT = {
   type: "json_schema",
   json_schema: {
-    name: "AthenaAnalysis",
+    name: "AthenaAnalysisV2",
     schema: {
       type: "object",
       additionalProperties: false,
-      required: ["observations", "hypotheses", "missing_evidence", "recommendations"],
+      required: ["interpretations", "missing_evidence", "recommendations"],
       properties: {
-        observations: { type: "array", maxItems: LIMITS.observations, items: { type: "object", additionalProperties: false, required: ["text", "cited_ids", "claims"], properties: { text: T, cited_ids: I, claims: C } } },
-        hypotheses: { type: "array", maxItems: LIMITS.hypotheses, items: { type: "object", additionalProperties: false, required: ["text", "verified", "cited_ids", "claims"], properties: { text: T, verified: { type: "boolean", enum: [false] }, cited_ids: I, claims: C } } },
+        interpretations: { type: "array", maxItems: LIMITS.interpretations, items: { type: "object", additionalProperties: false, required: ["text", "verified", "refs"], properties: { text: T, verified: { type: "boolean", enum: [false] }, refs: R } } },
         missing_evidence: { type: "array", maxItems: LIMITS.missing, items: T },
-        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "cited_ids", "claims"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, cited_ids: I, claims: C } } },
+        recommendations: { type: "array", maxItems: LIMITS.recommendations, items: { type: "object", additionalProperties: false, required: ["text", "requires_human_approval", "refs"], properties: { text: T, requires_human_approval: { type: "boolean", enum: [true] }, refs: R } } },
       },
     },
   },
@@ -100,20 +96,19 @@ export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId"
   return filterVisible(s.records, workspacesForRole(req.roleId));
 }
 
+/** Facts-only prompt: every authorized record is represented by exactly one verified fact (enforced by the adapter), so raw
+ * records add no evidence. Facts carry the record ids, values, units, department and direction; the two period dates are constant. */
 export function buildMessages(question: string, records: EvidenceRecord[]) {
-  const rows = records.map(({ id, department, date, metric, period, value, unit }) => ({ id, department, date, metric, period, value, unit }));
   const system =
-    "You analyse SYNTHETIC business records for a fictional company. Use ONLY the records provided. " +
-    "Cite record ids exactly as given in cited_ids. Never cite ids not in the input. Do not claim causation or proof; " +
-    "hypotheses are unverified co-movement. Recommendations are proposals that require human approval; you cannot execute actions. " +
-    "VERIFIED_FACTS are precomputed by the server; copy their values exactly and never compute your own. " +
-    "Every number you state must be a claim {fact_id, metric, kind, period (level only), value, unit, direction (change kinds only)} " +
-    "copied from one fact (kind level: prior/current value in the fact's unit; change_pct: unit '%'; change_pp: unit 'pp'), and the item's cited_ids must include that fact's record ids. " +
-    "Do not write any digits in text other than a claim's value; use claims: [] when stating no number. " +
-    "If evidence is missing, list it in missing_evidence. BE TERSE: at most " + `${LIMITS.observations} observations, ${LIMITS.hypotheses} hypotheses, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
+    "You analyse SYNTHETIC business facts for a fictional company. Use ONLY VERIFIED_FACTS, which the server computed. " +
+    "Refer to facts only by fact_id in refs. NEVER write any digit or number in any text: Athena displays every number itself, " +
+    "and you must not restate what a metric did. Give unverified interpretations (co-movement, not causation or proof), " +
+    "proposed actions that require human approval (you cannot execute anything), and missing_evidence. " +
+    "Every interpretation and recommendation must have refs listing the fact_ids it relies on. " +
+    "BE TERSE: at most " + `${LIMITS.interpretations} interpretations, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; ` + "each text one sentence under 25 words. Output only the JSON object.";
   return [
     { role: "system" as const, content: system },
-    { role: "user" as const, content: `Question: ${question}\nRecords (JSON): ${JSON.stringify(rows)}\nVERIFIED_FACTS (JSON): ${JSON.stringify(buildVerifiedFacts(records))}` },
+    { role: "user" as const, content: `Question: ${question}\nPERIODS (JSON): ${JSON.stringify({ prior: PERIODS.prior, current: PERIODS.current })}\nVERIFIED_FACTS (JSON): ${JSON.stringify(buildVerifiedFacts(records))}` },
   ];
 }
 
@@ -124,6 +119,15 @@ const CAUSE_WORD = /\bcauses?\b/;
 const INVESTIGATIVE = /\b(investigate|investigating|identify|examine|review|explore|assess|determine|diagnose|analy[sz]e|check|audit|verify|test|possible|potential|likely|underlying|root)\b/;
 
 /** Normalize to defeat case/width/zero-width obfuscation (NFKC, strip invisible chars, lowercase). */
+/** Invisible / formatting characters that can split or hide an identifier: soft hyphen, combining grapheme joiner, Arabic letter mark,
+ * Hangul/Khmer/Mongolian fillers, zero-width and bidi controls, word joiner and invisible operators, variation selectors, BOM. */
+const INVISIBLE = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+/** Comparison key for leak detection: NFKD (folds full-width and compatibility forms, splits accents), drops invisible characters
+ * and combining marks, lower-cases, and keeps only letters and digits, so dash variants, spaces, underscores, case and zero-width
+ * insertions cannot hide an identifier. Applied to BOTH the hidden identifier and the model text before comparing. */
+export const leakKey = (t: string) =>
+  t.normalize("NFKD").replace(INVISIBLE, "").replace(/\p{M}/gu, "").normalize("NFKD").replace(INVISIBLE, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
 export const normalizeText = (t: string) => t.normalize("NFKC").replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\s+/g, " ").toLowerCase();
 
 /** Returns true if text makes an unsupported causal claim. Investigative wording is allowed only in
@@ -139,33 +143,48 @@ export function hasCausalClaim(text: string, allowInvestigative: boolean): boole
   return false;
 }
 
-export type ValidationResult = { ok: true; output: MetaOutput } | { ok: false; errors: string[] };
+export type ValidationResult = { ok: true; output: MetaOutput; findings: VerifiedFinding[] } | { ok: false; errors: string[] };
 
-/** Strict output gate: schema, citation provenance, cross-workspace leaks, causal claims, numerical grounding. */
+const LEGACY_MESSAGE = "Legacy response format rejected: observations, hypotheses, claims and cited_ids are no longer accepted; send interpretations, recommendations and missing_evidence with fact refs";
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+function isLegacyShape(json: unknown): boolean {
+  if (!isObject(json)) return false;
+  if ("observations" in json || "hypotheses" in json) return true;
+  return ["interpretations", "recommendations"].some((k) => Array.isArray(json[k]) && (json[k] as unknown[]).some((it) => isObject(it) && ("cited_ids" in it || "claims" in it)));
+}
+
+/** Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy. */
 export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[]): ValidationResult {
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return { ok: false, errors: ["Output is not valid JSON"] }; }
+  if (isLegacyShape(json)) return { ok: false, errors: [LEGACY_MESSAGE] };
   const parsed = OutputSchema.safeParse(json);
   if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => `Schema: ${i.path.join(".") || "(root)"} ${i.message}`) };
   const out = parsed.data;
-  const allowed = new Set(authorized.map((r) => r.id));
-  const hidden = allRecords.filter((r) => !allowed.has(r.id));
+  const facts = buildVerifiedFacts(authorized);
+  const known = new Set(facts.map((f) => f.fact_id));
+  const hidden = allRecords.filter((r) => !authorized.some((a) => a.id === r.id));
   const errors: string[] = [];
-  const cited = [...out.observations, ...out.hypotheses, ...out.recommendations].flatMap((x) => x.cited_ids);
-  for (const id of new Set(cited)) if (!allowed.has(id)) errors.push(`Unsupported citation: ${id}`);
-  const texts = [...out.observations.map((x) => x.text), ...out.hypotheses.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
-  for (const r of hidden) if (texts.some((t) => t.includes(r.id) || t.includes(r.source))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
+  for (const ref of new Set([...out.interpretations, ...out.recommendations].flatMap((x) => x.refs))) if (!known.has(ref)) errors.push(`Unknown or unauthorized fact reference: ${ref}`);
+  const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
+  const textKeys = texts.map(leakKey);
+  for (const r of hidden) {
+    const idKey = leakKey(r.id), sourceKey = leakKey(r.source);
+    if (textKeys.some((k) => (idKey && k.includes(idKey)) || (sourceKey && k.includes(sourceKey)))) errors.push(`Cross-workspace leak: reference to unauthorized record ${r.id}`);
+  }
   const causalChecks: [string, boolean][] = [
-    ...out.observations.map((x) => [x.text, false] as [string, boolean]),
-    ...out.hypotheses.map((x) => [x.text, false] as [string, boolean]),
+    ...out.interpretations.map((x) => [x.text, false] as [string, boolean]),
     ...out.missing_evidence.map((x) => [x, true] as [string, boolean]),
     ...out.recommendations.map((x) => [x.text, true] as [string, boolean]),
   ];
   for (const [t, inv] of causalChecks) if (hasCausalClaim(t, inv)) { errors.push(`Causal-proof language rejected: "${t.slice(0, 60)}"`); break; }
-  // Numerical grounding: claims must match server-verified facts exactly; numbers in text must be claim-backed.
-  const facts = buildVerifiedFacts(authorized);
   const recordIds = allRecords.map((r) => r.id);
-  for (const item of [...out.observations, ...out.hypotheses, ...out.recommendations]) errors.push(...verifyItem(item, facts, recordIds));
-  for (const t of out.missing_evidence) errors.push(...verifyItem({ text: t }, facts, recordIds));
-  return errors.length ? { ok: false, errors } : { ok: true, output: out };
+  for (const t of texts) errors.push(...verifyNoNumerals(t, recordIds));
+  if (errors.length) return { ok: false, errors };
+  const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
+  return {
+    ok: true,
+    output: { interpretations: out.interpretations.map(enrich), missing_evidence: out.missing_evidence, recommendations: out.recommendations.map(enrich) },
+    findings: renderFindings(authorized),
+  };
 }

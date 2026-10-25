@@ -4,7 +4,19 @@ import { getMetaStatus, runMetaComparison } from "@/lib/athena/meta.functions";
 import type { MetaResult, MetaStatus } from "@/lib/athena/meta/adapter.server";
 import type { Analysis } from "@/lib/athena/engine";
 import { META_MODEL } from "@/lib/athena/meta/contract";
+import type { VerifiedFinding } from "@/lib/athena/meta/findings";
 import { createRequestGate, scopeKey, visibleFor, type Tagged } from "@/lib/athena/meta/requestGate";
+
+/** Supporting verified findings for a model item. Looked up from the server-rendered findings; never from model text. */
+function BasedOn({ refs, findings }: { refs: string[]; findings: VerifiedFinding[] }) {
+  const rows = refs.map((r) => findings.find((f) => f.fact_id === r)).filter((f): f is VerifiedFinding => !!f);
+  return (
+    <ul className="mt-1 space-y-0.5 border-l-2 border-success/50 pl-2 text-[10px] text-muted-foreground">
+      <li className="font-mono uppercase tracking-widest">Model cites these verified findings</li>
+      {rows.map((f) => <li key={f.fact_id}>✓ {f.text} <span className="font-mono text-accent">[{f.supporting_ids.join(", ")}]</span></li>)}
+    </ul>
+  );
+}
 
 export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenarioId: string; roleId: string; workspaces: string[]; analysis: Analysis }) {
   const statusFn = useServerFn(getMetaStatus);
@@ -48,7 +60,7 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
   return (
     <div className="space-y-4 text-sm">
       <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
-        <b>Optional live Meta API analysis ({META_MODEL}) — off by default.</b> The deterministic analysis on the left runs locally and never calls any API. A live Meta request is made only if the server key and owner activation are set <i>and</i> you confirm below; it runs on the server, once, with no retries, and sends only synthetic records from your visible workspaces to the Meta API. It is a paid call.
+        <b>Optional live Meta API analysis ({META_MODEL}) — off by default.</b> The deterministic analysis on the left runs locally and never calls any API. A live Meta request is made only if the server key and owner activation are set <i>and</i> you confirm below; it runs on the server, once, with no retries, and sends only verified facts derived from synthetic records in your visible workspaces to the Meta API. It is a paid call.
       </div>
       <ul className="space-y-1 rounded-md bg-secondary p-3 text-xs">
         <Row k="Server key META_MODEL_API_KEY configured" ok={status?.keyConfigured} />
@@ -56,7 +68,7 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
         <li className="flex justify-between text-muted-foreground"><span>Hard token cap (input / output incl. hidden reasoning)</span><span>{status ? `${status.maxInputTokens} / ${status.maxOutputTokens}` : "—"}</span></li>
         <li className="flex justify-between text-muted-foreground"><span>Cost per run</span><span>Unknown — pricing not verified</span></li>
       </ul>
-      <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"><b>DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION.</b> The server sends only the records its own fixed role list allows, and ignores any workspace list from the browser. But there is no sign-in, so anyone can claim any demo role. Not safe for real data.</p>
+      <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"><b>DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION.</b> The server sends only facts derived from the records its own fixed role list allows, and ignores any workspace list from the browser. But there is no sign-in, so anyone can claim any demo role. Not safe for real data.</p>
       {isCustom && <p className="text-xs text-warning">Custom workspace toggles are on-screen only. Pick a named role to run Meta.</p>}
       <label className="flex items-start gap-2 text-xs">
         <input type="checkbox" disabled={!status?.ready || isCustom} checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-0.5" />
@@ -80,15 +92,52 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
           {result && result.state !== "ok" && (
             <div className="mt-2 text-xs text-destructive">
               <b>{result.state}</b>{"reason" in result ? `: ${result.reason}` : ""}
-              {"errors" in result && <ul className="list-disc pl-4">{result.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+              {"errors" in result && <ul className="list-disc pl-4">{result.errors.map((e, i) => <li key={`err-${i}`}>{e}</li>)}</ul>}
             </div>
           )}
           {result?.state === "ok" && (
-            <div className="mt-2 space-y-2 text-xs">
-              <ul className="list-disc pl-4">{result.output.observations.map((o) => <li key={o.text}>{o.text} <span className="font-mono text-accent">[{o.cited_ids.join(", ")}]</span>{o.claims.map((c) => <span key={`${c.fact_id}-${c.kind}-${c.period ?? ""}`} className="ml-1 rounded bg-success/10 px-1 font-mono text-[10px] text-success">✓ verified {c.metric} {c.kind}{c.period ? ` ${c.period}` : ""} = {c.value} {c.unit}</span>)}</li>)}</ul>
-              <ul className="list-disc pl-4 text-warning">{result.output.hypotheses.map((o) => <li key={o.text}>Unverified: {o.text}</li>)}</ul>
-              <ul className="list-disc pl-4 text-muted-foreground">{result.output.missing_evidence.map((o) => <li key={o}>Missing: {o}</li>)}</ul>
-              <ul className="list-disc pl-4">{result.output.recommendations.map((o) => <li key={o.text}>{o.text} <i className="text-muted-foreground">(needs human approval; not executable)</i></li>)}</ul>
+            <div className="mt-2 space-y-3 text-xs">
+              <section aria-label="Verified findings">
+                <h4 className="font-semibold text-success">Verified findings <span className="font-normal text-muted-foreground">· computed by Athena from authorized records · no model text</span></h4>
+                <ul className="mt-1 space-y-1">
+                  {result.findings.map((f) => (
+                    <li key={f.fact_id} className="rounded border border-success/40 bg-success/10 p-1.5">
+                      <span className="mr-1 rounded bg-success/20 px-1 font-mono text-[10px] text-success">✓ verified</span>{f.text}
+                      <span className="ml-1 font-mono text-[10px] text-accent">[{f.supporting_ids.join(", ")}]</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section aria-label="Muse Spark interpretations">
+                <h4 className="font-semibold text-warning">Interpretations <span className="font-normal text-muted-foreground">· written by {META_MODEL} · UNVERIFIED hypotheses, not facts</span></h4>
+                {result.output.interpretations.length === 0 && <p className="mt-1 text-muted-foreground">None returned.</p>}
+                <ul className="mt-1 space-y-1">
+                  {result.output.interpretations.map((o, i) => (
+                    <li key={`interp-${i}`} className="rounded border border-warning/40 bg-warning/10 p-1.5">
+                      <span className="mr-1 rounded bg-warning/20 px-1 font-mono text-[10px] text-warning">unverified</span>{o.text}
+                      <BasedOn refs={o.refs} findings={result.findings} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section aria-label="Proposed actions">
+                <h4 className="font-semibold">Proposed actions <span className="font-normal text-muted-foreground">· written by {META_MODEL} · require human approval · not executable</span></h4>
+                {result.output.recommendations.length === 0 && <p className="mt-1 text-muted-foreground">None returned.</p>}
+                <ul className="mt-1 space-y-1">
+                  {result.output.recommendations.map((o, i) => (
+                    <li key={`rec-${i}`} className="rounded border border-border p-1.5">
+                      {o.text} <i className="text-muted-foreground">(needs human approval; not executable)</i>
+                      <BasedOn refs={o.refs} findings={result.findings} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              {result.output.missing_evidence.length > 0 && (
+                <section aria-label="Gaps noted by the model">
+                  <h4 className="font-semibold text-muted-foreground">Gaps noted by {META_MODEL} <span className="font-normal">· model-generated · unverified</span></h4>
+                  <ul className="mt-1 list-disc pl-4 text-muted-foreground">{result.output.missing_evidence.map((o, i) => <li key={`gap-${i}`}>{o}</li>)}</ul>
+                </section>
+              )}
             </div>
           )}
           {result && "usage" in result && result.usage && <p className="mt-2 text-[10px] text-muted-foreground">Tokens: {result.usage.prompt_tokens ?? "?"} in / {result.usage.completion_tokens ?? "?"} out of {result.usage.max_tokens_sent} cap (hidden reasoning: {result.usage.reasoning_tokens ?? "not reported"}; visible: {result.usage.visible_output_tokens ?? "?"}) · finish: {result.usage.finish_reason ?? "?"}</p>}

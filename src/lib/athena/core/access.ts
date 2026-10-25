@@ -23,6 +23,10 @@ export interface EvidenceScope<E extends Evidence = Evidence> {
   readonly tenantId: string;
   /** Must return exactly `true` to allow a record. Anything else (false, undefined, a throw) denies. */
   permits(evidence: E): boolean;
+  /** OPTIONAL. Catalog metric keys the caller may DISCOVER (see their name in relationship, missing-data and focus text) even when no authorized record
+   * carries data for them. This is a separate question from `permits`: permission to discover a metric is not data about it. Absent: only metrics that have
+   * authorized verified data are discoverable. A metric is never made discoverable merely because another metric of its domain is. */
+  readonly discoverableMetrics?: readonly string[];
 }
 export interface AccessPolicy<E extends Evidence = Evidence> {
   evidenceScope(ctx: TrustedContext): EvidenceScope<E>;
@@ -41,6 +45,8 @@ export interface AuthorizationResult<E extends Evidence = Evidence> {
   /** Candidates the context may not use (other tenants, other roles). SERVER-SIDE ONLY: used to detect leaks of their identifiers in
    * model text. Must never be put in a prompt, a response or a log. */
   readonly withheld: readonly E[];
+  /** A frozen copy of the scope's `discoverableMetrics` (empty if it declared none). */
+  readonly discoverableMetrics: readonly string[];
 }
 
 const authorizedSets = new WeakSet<object>();
@@ -76,7 +82,13 @@ export function authorizeEvidence<E extends Evidence>(identity: IdentityBoundary
   if (!scope || scope.tenantId !== ctx.tenantId) throw new AuthorizationError();
   const kept: E[] = [];
   const withheld: E[] = [];
+  let discoverableMetrics: readonly string[] = [];
   try {
+    const d = scope.discoverableMetrics; // read once; a malformed declaration fails closed rather than widening or silently dropping scope
+    if (d !== undefined) {
+      if (!Array.isArray(d) || !d.every(nonEmpty)) throw new AuthorizationError();
+      discoverableMetrics = Object.freeze([...new Set<string>(d)]);
+    }
     for (const c of candidates) {
       if (wellFormed(c) && c.tenantId === ctx.tenantId && scope.permits(c) === true) kept.push(Object.freeze({ ...c }));
       else withheld.push(c);
@@ -86,5 +98,5 @@ export function authorizeEvidence<E extends Evidence>(identity: IdentityBoundary
   }
   const authorized = Object.freeze(Object.assign(kept, { tenantId: ctx.tenantId })) as unknown as AuthorizedEvidence<E>;
   authorizedSets.add(authorized);
-  return Object.freeze({ authorized, withheld: Object.freeze(withheld) });
+  return Object.freeze({ authorized, withheld: Object.freeze(withheld), discoverableMetrics });
 }

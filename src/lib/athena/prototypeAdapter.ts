@@ -10,7 +10,8 @@ import { z } from "zod";
 import { authorizeEvidence, type AccessPolicy, type AuthorizationResult, type EvidenceScope, type EvidenceStore, type TrustedContext } from "./core/access";
 import { createIdentityBoundary, type IdentityVerifier } from "./core/identity";
 import type { Evidence } from "./core/evidence";
-import { DEMO_TENANT_ID, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "./data";
+import { PROTOTYPE_CATALOG } from "./prototypeCatalog";
+import { DEMO_TENANT_ID, DEPT_WORKSPACE, ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "./data";
 import type { ResolvedRequest } from "./meta/runtime";
 
 /** A prototype record that carries the tenant and so satisfies the neutral `Evidence` interface. */
@@ -40,7 +41,10 @@ export const demoAccessPolicy: AccessPolicy<PrototypeEvidence> = {
   evidenceScope(ctx: TrustedContext): EvidenceScope<PrototypeEvidence> {
     const granted = ctx.tenantId === DEMO_TENANT_ID ? WORKSPACES_BY_ACTOR.get(ctx.actorId) : undefined;
     const allowed = new Set(granted ?? []);
-    return { tenantId: ctx.tenantId, permits: (e) => allowed.has(e.workspace) };
+    // The demo's explicit metric-discovery grant: a role may see the NAMES of the metrics owned by the departments whose workspaces it holds, even in a scenario
+    // that has no data for one of them ("no verified data"). This is stated here, by the policy; the engine never infers it from the domains of the data it sees.
+    const discoverableMetrics = PROTOTYPE_CATALOG.metrics.filter((m) => allowed.has((DEPT_WORKSPACE as Record<string, string>)[m.domain] ?? "")).map((m) => m.key);
+    return { tenantId: ctx.tenantId, permits: (e) => allowed.has(e.workspace), discoverableMetrics };
   },
 };
 

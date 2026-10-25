@@ -10,7 +10,8 @@
 //    unverified, never above "Medium" plausibility.
 //  * MISSING EVIDENCE: what would be needed to go beyond co-movement, and metrics a relationship needs but the caller has no verified data for.
 //  * ACTION: a suggestion tied to a hypothesis; always `requires_human_approval: true` and `executable: false`.
-//  * SCOPE: a relationship is considered only if BOTH of its metrics belong to domains the caller is authorized for. Anything else is omitted without a trace
+//  * SCOPE: a relationship is considered only if BOTH of its metrics are DISCOVERABLE by the caller: they have authorized verified data, or the access-policy layer
+//    explicitly granted them (`EvidenceScope.discoverableMetrics`). Domain membership never makes a metric discoverable. Anything else is omitted without a trace
 //    (no names, no "hidden" placeholders), so the map cannot reveal that unauthorized metrics exist.
 import { assertAuthorized, type AuthorizedEvidence } from "../core/access";
 import { assertCatalog, metricDef, type Catalog } from "../core/catalog";
@@ -132,6 +133,9 @@ export interface ImpactOptions {
   provenance?: (evidenceId: string) => ProvenanceRef | undefined;
   /** The (already validated) analysis question; used only to choose which authorized relationships to foreground. Default: no focus. */
   question?: string;
+  /** Metric keys the access-policy layer explicitly lets the caller discover without data (`EvidenceScope.discoverableMetrics`). Metrics with authorized
+   * verified data are always discoverable; no other metric is, and domain membership never makes one so. Unknown keys are ignored. */
+  discoverableMetrics?: readonly string[];
 }
 
 export function buildImpactMap<E extends Evidence>(authorized: AuthorizedEvidence<E>, ctx: AnalysisContext, model: RelationshipModel, opts: ImpactOptions = {}): ImpactMap {
@@ -140,13 +144,14 @@ export function buildImpactMap<E extends Evidence>(authorized: AuthorizedEvidenc
   assertRelationshipModel(model, ctx.catalog);
   const cat = ctx.catalog;
   const period = `${ctx.periods.prior.label} → ${ctx.periods.current.label}`;
-  const domains = new Set(authorized.map((e) => e.department));
-  const inScope = (metric: string) => domains.has(metricDef(cat, metric)!.domain);
   const sourceOf = new Map(authorized.map((e) => [e.id, e.source]));
 
   // ---- verified changes (the full verified picture; catalog order for stable output)
   const facts = computeAuthorizedFacts(authorized, ctx);
   const factOf = new Map(facts.map((f) => [f.metric, f]));
+  // Discoverable = has authorized verified data, or is explicitly granted by the access-policy layer. NEVER inferred from the domain of another metric.
+  const discoverable = new Set<string>([...factOf.keys(), ...(opts.discoverableMetrics ?? []).filter((k) => !!metricDef(cat, k))]);
+  const inScope = (metric: string) => discoverable.has(metric);
   const order = new Map(cat.metrics.map((m, i) => [m.key, i]));
   const verified_changes: VerifiedChange[] = [...facts].sort((a, b) => order.get(a.metric)! - order.get(b.metric)!).map((f) => {
     const refs = opts.provenance ? f.evidenceIds.map((id) => opts.provenance!(id)).filter((p): p is ProvenanceRef => !!p) : [];
@@ -157,7 +162,7 @@ export function buildImpactMap<E extends Evidence>(authorized: AuthorizedEvidenc
     return refs.length ? { ...vc, provenance: refs } : vc;
   });
 
-  // ---- relationships in scope: both metrics belong to authorized domains; everything else is omitted without a trace
+  // ---- relationships in scope: both metrics are discoverable (authorized data, or explicitly granted); everything else is omitted without a trace
   const considered = model.rules.filter((r) => inScope(r.from) && inScope(r.to));
 
   // ---- focus: what the question is about (authorized metrics only), then the relationships connecting them

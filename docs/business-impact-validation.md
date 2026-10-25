@@ -18,7 +18,7 @@ Synthetic data only. No model, no network, no secrets. Everything below is repro
 | Hypotheses | **unverified** | operator-written, hedged implication, shown only for an observed relationship, never above Medium plausibility |
 | Missing evidence | n/a | what would be needed to say more; metrics a relationship needs but the caller has no verified data for; "longer history than two periods" |
 | Proposed actions | suggestion | tied to a hypothesis; `requires_human_approval: true`, `executable: false` |
-A relationship is considered only if **both** metrics belong to domains the caller is authorized for; otherwise it is omitted with no trace (no name, no placeholder).
+A relationship is considered only if **both** of its metrics are *discoverable* by the caller; otherwise it is omitted with no trace (no name, no id, no placeholder). A metric is discoverable if the caller has authorized verified data for it, or if the access-policy layer explicitly grants it through the optional `EvidenceScope.discoverableMetrics` list. Authorization to discover a metric is separate from having data for it: a granted metric with no data gets the "no verified data" explanation and a "Verified data for …" entry, and nothing else. Discoverability is **never inferred from the domain** of another visible metric. Without a grant, a metric with no authorized data is simply invisible.
 
 ## What the engine can genuinely establish from this evidence
 * **Verified metric changes** with exact figures, direction and provenance, for every authorized metric (baseline: leads +50%, MQL rate -38.2%, conversion -43.2%, closed deals -14.8%, fulfillment +151.6%, backorders +325%, revenue -17.9%, acquisition cost +19.5%; support: tickets +20%, first response flat, resolution +32.7%, CSAT -4.3%).
@@ -42,6 +42,6 @@ The same code produces maps for the prototype's business-operations catalog and 
 * Direction coupling only (`same`/`opposite`); no thresholds on magnitude, no lag, no multi-metric conditions.
 * The semantic question-to-focus matching uses catalog aliases (English keyword matching): paraphrases are not recognized, in which case all authorized relationships are shown.
 * The map is not wired into the UI or the model path; the model's interpretations and this map are separate artifacts today.
-* Domain-level scope: a role authorized for some records of a domain may see other metric labels of that domain when reported as "no verified data" (catalog names, not data).
+* Metric-discovery scope: `discoverableMetrics` is a flat list of catalog keys supplied by the policy; it cannot express per-period, per-field or conditional discovery, and the engine trusts the policy to grant only what the caller may know exists. The prototype's demo policy grants every metric owned by the departments whose workspaces the role holds (an explicit statement in `demoAccessPolicy`, not an engine inference). A proposed action names its operator-declared owner domain, which is a department name, not a metric; the owner is shown only for a relationship whose two metrics have authorized data.
 * Rule texts are trusted operator configuration (validated for hedging and cause wording, not for factual correctness).
 * The prototype's remaining coupling and the engine's other limitations are in `docs/engine-runtime.md` and `docs/ingestion.md`.

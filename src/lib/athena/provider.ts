@@ -1,4 +1,4 @@
-// Model provider interface for future integration. NO live calls are made.
+// Model provider interface. Neither provider here makes network calls; the optional live Meta analysis is a separate gated path (meta.functions.ts + meta/).
 import type { Analysis } from "./engine";
 
 export interface ModelProvider {
@@ -11,7 +11,7 @@ export interface ModelProvider {
 
 export const deterministicProvider: ModelProvider = {
   id: "deterministic",
-  label: "Deterministic demo engine (rules)",
+  label: "Local deterministic engine (rules, no network)",
   status: "active",
   async summarize(a) {
     const s = a.signals.filter((c) => c.status === "observed").map((c) => c.title.toLowerCase());
@@ -19,10 +19,10 @@ export const deterministicProvider: ModelProvider = {
   },
 };
 
-/** Placeholder for a future Meta model provider. Not integrated; never returns fabricated output. */
+/** Placeholder slot for a Meta summarizer. Not wired to this interface (live Meta runs via meta.functions.ts); never returns fabricated output. */
 export const metaProviderStub: ModelProvider = {
   id: "meta-future",
-  label: "Meta model provider (future — not integrated)",
+  label: "Meta summarizer slot (placeholder — live Meta runs in the panel below)",
   status: "not-configured",
   async summarize() {
     return null;

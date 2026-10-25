@@ -339,7 +339,10 @@ describe("structure: the live path cannot reach raw evidence", () => {
     const { readdirSync, statSync } = await import("node:fs");
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
     const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary/.test(readFileSync(f, "utf8")));
-    expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/prototypeAdapter.ts"]);
+    // core/ingest/testSupport.ts is the ingestion tests' own composition root; it must never be imported by production code (checked next)
+    expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/core/ingest/testSupport.ts", "src/lib/athena/prototypeAdapter.ts"]);
+    const importers = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && f !== "src/lib/athena/core/ingest/testSupport.ts" && /testSupport/.test(readFileSync(f, "utf8")));
+    expect(importers).toEqual([]);
   });
   it("the browser bundle never imports the authorization or adapter modules", async () => {
     const { readdirSync, statSync } = await import("node:fs");

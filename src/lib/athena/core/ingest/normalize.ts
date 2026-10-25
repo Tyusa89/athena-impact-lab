@@ -134,7 +134,7 @@ export function importSource<Input>(req: ImportRequest<Input>): ImportResult {
   const periods = { [spec.periods.prior.label]: { role: "prior" as const, end: spec.periods.prior.end }, [spec.periods.current.label]: { role: "current" as const, end: spec.periods.current.end } };
   const idPrefix = spec.idPrefix ?? source.sourceId;
 
-  interface Row { line: number; reasons: RejectionReason[]; key?: string; ev?: Omit<Evidence, "tenantId"> & { _key: string; _sig: string } }
+  interface Row { line: number; reasons: RejectionReason[]; key?: string; id?: string; ev?: Omit<Evidence, "tenantId"> & { _key: string; _sig: string } }
   const rows: Row[] = [];
   for (const r of table.rows) {
     const reasons: RejectionReason[] = [];
@@ -195,8 +195,11 @@ export function importSource<Input>(req: ImportRequest<Input>): ImportResult {
     let note: string | undefined;
     if (ix.note >= 0) { const n = text("note", ix.note); if (n !== undefined) { if (n.length > MAX_NOTE) bad("note_invalid", "note"); else if (n !== "") note = n; } }
 
-    const ok = reasons.length === 0 && def && value !== undefined && p && id !== undefined && unitCell !== undefined;
     const row: Row = { line: r.line, reasons };
+    // Every row with a SYNTACTICALLY VALID id reserves it, whatever else is wrong with the row. (Malformed ids were already rejected above and
+    // stay out, so they can never match anything; a row with the wrong cell count never reaches here, its cells being misaligned.)
+    if (id !== undefined) row.id = id;
+    const ok = reasons.length === 0 && def && value !== undefined && p && id !== undefined && unitCell !== undefined;
     if (ok) {
       row.ev = { id: id!, source: srcLabel, metric: def!.key, department: def!.domain, period: p!.role, date: p!.end, value: value!, unit: def!.unit, ...(note !== undefined ? { note } : {}), _key: `${def!.key}\u0000${p!.role}`, _sig: `${value}\u0000${def!.unit}\u0000${srcLabel}` };
     }
@@ -211,7 +214,7 @@ export function importSource<Input>(req: ImportRequest<Input>): ImportResult {
   for (const row of rows) {
     const k = row.ev?._key ?? row.key;
     if (k !== undefined) (byKey.get(k) ?? byKey.set(k, []).get(k)!).push(row);
-    if (row.ev) (byId.get(row.ev.id) ?? byId.set(row.ev.id, []).get(row.ev.id)!).push(row);
+    if (row.id !== undefined) (byId.get(row.id) ?? byId.set(row.id, []).get(row.id)!).push(row); // all rows with a valid id, not only fully valid ones
   }
   for (const group of byKey.values()) {
     if (group.length < 2) continue;

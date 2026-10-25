@@ -11,11 +11,13 @@
 import { z } from "zod";
 import { assertCatalog } from "../core/catalog";
 import type { AnalysisContext } from "../core/facts";
-import { ROLES, SCENARIOS, WORKSPACES, type EvidenceRecord } from "../data";
-import { PROTOTYPE_CONTEXT, filterVisible } from "../engine";
+import { assertAuthorized, type AuthorizedEvidence } from "../core/access";
+import type { EvidenceRecord } from "../data";
+import { PROTOTYPE_CONTEXT } from "../engine";
+import { authorizeDemo, type MetaRequest, type PrototypeEvidence } from "../prototypeAdapter";
 import { renderFindings, type VerifiedFinding } from "./findings";
 import { checkSemantics, semanticScope } from "./semanticGuards";
-import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
+import { INVISIBLE_CHARS, buildAuthorizedFacts, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./numericGrounding";
 
 export const META_ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 export const META_MODEL = "muse-spark-1.3";
@@ -25,31 +27,11 @@ export const MAX_OUTPUT_TOKENS = 2000;
 export const REASONING_EFFORT = "minimal" as const;
 export const LIMITS = { interpretations: 3, missing: 4, recommendations: 3, text: 200, refs: 4 } as const;
 export const REQUEST_TIMEOUT_MS = 30_000;
-/** Synthetic-only allowlist: only these bundled scenario IDs can ever be sent. */
-export const SYNTHETIC_SCENARIO_ALLOWLIST: readonly string[] = SCENARIOS.map((s) => s.id);
-const WORKSPACE_IDS = WORKSPACES.map((w) => w.id) as readonly string[];
-
-/** DEMO ROLE FILTERING ONLY — NOT REAL AUTHORIZATION. Server-owned, frozen role → workspace allowlist.
- * Copied (not referenced) from the UI role list so runtime mutation of ROLES cannot widen it.
- * Any caller can still CLAIM any listed role: there is no sign-in. */
-export const SERVER_ROLE_WORKSPACES: Readonly<Record<string, readonly string[]>> = Object.freeze(
-  Object.fromEntries(ROLES.map((r) => [r.id, Object.freeze(r.workspaces.filter((w) => WORKSPACE_IDS.includes(w)))])),
-);
-export function workspacesForRole(roleId: string): readonly string[] {
-  if (!Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, roleId)) throw new Error("Unknown role");
-  return SERVER_ROLE_WORKSPACES[roleId]!;
-}
+// The demo's allowlist, roles, workspaces and request shape live in the prototype adapter; re-exported here for existing imports.
+export { SERVER_ROLE_WORKSPACES, SYNTHETIC_SCENARIO_ALLOWLIST, workspacesForRole, RequestSchema, type MetaRequest } from "../prototypeAdapter";
 
 /** Rough, conservative token estimate (~3 chars/token). */
 export const estimateTokens = (s: string) => Math.ceil(s.length / 3);
-
-export const RequestSchema = z.object({
-  scenarioId: z.string().refine((id) => SYNTHETIC_SCENARIO_ALLOWLIST.includes(id), "Scenario not in synthetic allowlist"),
-  // Only an allowlisted role id is accepted; any client workspaces/records/other fields are stripped by zod.
-  roleId: z.string().refine((r) => Object.prototype.hasOwnProperty.call(SERVER_ROLE_WORKSPACES, r), "Unknown role"),
-  ownerConfirmed: z.literal(true),
-});
-export type MetaRequest = z.infer<typeof RequestSchema>;
 
 // Three lanes. Verified findings are NOT part of the model output: Athena renders them server-side from verified facts.
 // The model supplies only unverified interpretations and human-approval-gated proposals, each pointing at fact ids.
@@ -92,16 +74,14 @@ export const RESPONSE_FORMAT = {
   },
 } as const;
 
-/** Server-side reconstruction: records come only from bundled synthetic data, filtered BEFORE prompt building. */
-export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId">): EvidenceRecord[] {
-  const s = SCENARIOS.find((x) => x.id === req.scenarioId);
-  if (!s) throw new Error("Scenario not in synthetic allowlist");
-  return filterVisible(s.records, workspacesForRole(req.roleId));
+/** Server-side reconstruction: records come only from the server's own evidence store, authorized for a trusted context BEFORE prompt building. */
+export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId">): AuthorizedEvidence<PrototypeEvidence> {
+  return authorizeDemo(req).authorized;
 }
 
 /** Facts-only prompt: every authorized record is represented by exactly one verified fact (enforced by the adapter), so raw
  * records add no evidence. Facts carry the record ids, values, units, department and direction; the two period dates are constant. */
-export function buildMessages(question: string, records: EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) {
+export function buildMessages(question: string, records: readonly EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) {
   const system =
     "You analyse SYNTHETIC business facts for a fictional company. Use ONLY VERIFIED_FACTS, which the server computed. " +
     "Refer to facts only by fact_id in refs. NEVER write any digit or number in any text: Athena displays every number itself, " +
@@ -162,7 +142,7 @@ function isLegacyShape(json: unknown): boolean {
  * Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy and semantic guards.
  * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
  */
-export function validateOutput(raw: string, authorized: EvidenceRecord[], allRecords: EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): ValidationResult {
+export function validateOutput(raw: string, authorized: readonly EvidenceRecord[], allRecords: readonly EvidenceRecord[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): ValidationResult {
   assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
@@ -173,7 +153,10 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
   const out = parsed.data;
   const facts = buildVerifiedFacts(authorized, ctx);
   const known = new Set(facts.map((f) => f.fact_id));
-  const hidden = allRecords.filter((r) => !authorized.some((a) => a.id === r.id));
+  // A record is authorized only if the same tenant's record with that id is: another tenant's record that happens to reuse an id is still hidden.
+  const recordKey = (r: EvidenceRecord) => `${r.tenantId ?? ""}\u0000${r.id}`;
+  const authorizedKeys = new Set(authorized.map(recordKey));
+  const hidden = allRecords.filter((r) => !authorizedKeys.has(recordKey(r)));
   const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
   // A leak is reported on its own, so nothing else (which might quote model text) is returned alongside it.
   const textKeys = texts.map(leakKey);
@@ -199,4 +182,15 @@ export function validateOutput(raw: string, authorized: EvidenceRecord[], allRec
     output: { interpretations: out.interpretations.map(enrich), missing_evidence: out.missing_evidence, recommendations: out.recommendations.map(enrich) },
     findings: renderFindings(authorized, ctx),
   };
+}
+
+/** Model preparation for the live path: refuses anything that did not come from `authorizeEvidence`. */
+export function prepareMessages(question: string, authorized: AuthorizedEvidence<PrototypeEvidence>, ctx: AnalysisContext = PROTOTYPE_CONTEXT) {
+  assertAuthorized(authorized);
+  return buildMessages(question, authorized, ctx);
+}
+/** Output validation for the live path. `withheld` is the server-side set of records the caller may not see (their identifiers must not appear in model text). */
+export function validateAuthorizedOutput(raw: string, authorized: AuthorizedEvidence<PrototypeEvidence>, withheld: readonly PrototypeEvidence[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): ValidationResult {
+  assertAuthorized(authorized);
+  return validateOutput(raw, authorized, [...authorized, ...withheld], ctx);
 }

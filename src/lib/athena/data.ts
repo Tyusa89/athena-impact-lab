@@ -5,8 +5,13 @@ import { PROTOTYPE_CATALOG } from "./prototypeCatalog";
 /** Identifiers come from the prototype catalog (./prototypeCatalog); the unions below are derived from it, not declared here. */
 export type Department = DomainIdOf<typeof PROTOTYPE_CATALOG>;
 
+/** The single fictional tenant that owns every bundled scenario record. */
+export const DEMO_TENANT_ID = "tenant-verdant-hollow-demo";
+
 export interface EvidenceRecord {
   id: string;
+  /** Owning tenant. Set by the loader (here: `build`), never by a client or a model. Records without one are never authorized. */
+  tenantId?: string | undefined;
   department: Department;
   workspace: string; // simulated workspace for role-based visibility
   date: string; // ISO
@@ -66,8 +71,8 @@ export function build(prefix: string, rows: Row[]): EvidenceRecord[] {
     if (workspace !== DEPT_WORKSPACE[department]) throw new Error(`Workspace mismatch for ${metric}`);
     const n = String((counters[department] = (counters[department] ?? 0) + 1)).padStart(3, "0");
     const base = `${prefix}-${DEPT_CODE[department]}-${n}`;
-    out.push({ id: `${base}-Q2`, department, workspace, date: PERIODS.prior.date, source, metric, period: "prior", value: prior, unit });
-    out.push({ id: `${base}-Q3`, department, workspace, date: PERIODS.current.date, source, metric, period: "current", value: current, unit, note });
+    out.push({ id: `${base}-Q2`, tenantId: DEMO_TENANT_ID, department, workspace, date: PERIODS.prior.date, source, metric, period: "prior", value: prior, unit });
+    out.push({ id: `${base}-Q3`, tenantId: DEMO_TENANT_ID, department, workspace, date: PERIODS.current.date, source, metric, period: "current", value: current, unit, note });
   });
   return out;
 }

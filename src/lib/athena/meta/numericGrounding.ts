@@ -4,7 +4,9 @@
 // (see findings.ts). Free model text may therefore contain no numerals at all, so a number can never be attached
 // to the wrong metric, period or direction by the model. Anything unverifiable is rejected (fail closed).
 // Text is NFKC-normalized before scanning; numeric characters that stay non-ASCII are rejected outright.
-import { computeFacts, type AnalysisContext, type CoreRecord, type PeriodPair } from "../core/facts";
+import type { AuthorizedEvidence } from "../core/access";
+import type { Evidence } from "../core/evidence";
+import { computeAuthorizedFacts, computeFacts, type AnalysisContext, type CoreFact, type CoreRecord, type PeriodPair } from "../core/facts";
 import type { EvidenceRecord } from "../data";
 import { PROTOTYPE_CONTEXT } from "../engine";
 
@@ -28,7 +30,10 @@ export const factIdFor = (m: string) => `F-${m}`;
 
 /** Verified facts from authorized records only, via the engine's own computeFacts (one fact per metric). */
 export function buildVerifiedFacts<R extends CoreRecord>(authorized: readonly R[], ctx: AnalysisContext = PROTOTYPE_CONTEXT): VerifiedFact<R["metric"]>[] {
-  return computeFacts(authorized, ctx).map((f) => ({
+  return toVerifiedFacts(computeFacts(authorized, ctx));
+}
+const toVerifiedFacts = <M extends string>(facts: CoreFact<M, string>[]): VerifiedFact<M>[] =>
+  facts.map((f) => ({
     fact_id: factIdFor(f.metric),
     metric: f.metric,
     department: f.department,
@@ -39,6 +44,10 @@ export function buildVerifiedFacts<R extends CoreRecord>(authorized: readonly R[
     change_pp: f.changePp,
     direction: f.direction,
   }));
+
+/** Verified facts for the live path: refuses anything that did not come from `authorizeEvidence`. */
+export function buildAuthorizedFacts<E extends Evidence>(authorized: AuthorizedEvidence<E>, ctx: AnalysisContext = PROTOTYPE_CONTEXT): VerifiedFact<E["metric"]>[] {
+  return toVerifiedFacts(computeAuthorizedFacts(authorized, ctx));
 }
 
 /** Authorized records that no verified fact represents. Facts-only prompting is allowed only when this is empty. */

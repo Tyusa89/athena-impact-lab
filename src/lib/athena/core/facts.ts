@@ -1,6 +1,8 @@
 // Verified-fact calculation, parameterized by a catalog and a pair of reporting periods. Pure and dependency-free.
 // This is the single place where a prior/current pair of records becomes a fact, a direction and a rendered change.
+import { assertAuthorized, type AuthorizedEvidence } from "./access";
 import { assertCatalog, metricDef, type Catalog } from "./catalog";
+import type { Evidence } from "./evidence";
 
 /** The minimum a record must carry to be compared across periods. `department` holds the id of the record's catalog domain. */
 export interface CoreRecord {
@@ -61,6 +63,13 @@ export function computeFacts<R extends CoreRecord>(records: readonly R[], ctx: A
     facts.push({ metric: m, label: def.label, department: c.department, prior: p.value, current: c.value, unit: c.unit, changePct, changePp, direction, evidenceIds: [p.id, c.id], periodLabel: `${ctx.periods.prior.label} → ${ctx.periods.current.label}` });
   }
   return facts;
+}
+
+/** Fact calculation for the live path: refuses anything that did not come from `authorizeEvidence` (a spread, filter or slice of authorized
+ * evidence is a plain array again and is refused). `computeFacts` stays a pure function over whatever it is given. */
+export function computeAuthorizedFacts<E extends Evidence>(authorized: AuthorizedEvidence<E>, ctx: AnalysisContext): CoreFact<E["metric"], E["department"]>[] {
+  assertAuthorized(authorized);
+  return computeFacts(authorized, ctx);
 }
 
 export function describeChange(f: Pick<CoreFact, "unit" | "prior" | "current" | "changePct" | "changePp">): string {

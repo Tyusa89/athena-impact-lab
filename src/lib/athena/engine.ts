@@ -57,7 +57,7 @@ export function filterVisible(records: EvidenceRecord[], workspaces: readonly st
   return records.filter((r) => set.has(r.workspace));
 }
 
-export function computeFacts(records: EvidenceRecord[]): Fact[] {
+export function computeFacts(records: readonly EvidenceRecord[]): Fact[] {
   return coreComputeFacts(records, PROTOTYPE_CONTEXT);
 }
 

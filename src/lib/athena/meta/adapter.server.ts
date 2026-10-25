@@ -1,10 +1,13 @@
 // Server-only Meta adapter. Exactly one request, no retries, hard token budget.
 // Never executes approvals/actions: it only returns validated text.
-import { SCENARIOS, type EvidenceRecord } from "../data";
-import { DEMO_QUESTION } from "../engine";
+import { AuthorizationError, assertAuthorized, authorizeEvidence, type AccessPolicy, type AuthorizedEvidence, type EvidenceStore, type TrustedContext } from "../core/access";
+import type { AnalysisContext } from "../core/facts";
+import type { EvidenceRecord } from "../data";
+import { DEMO_QUESTION, PROTOTYPE_CONTEXT } from "../engine";
+import { demoAccessPolicy, demoEvidenceStore, resolveDemoRequest, type PrototypeEvidence, type ResolvedRequest } from "../prototypeAdapter";
 import {
   META_ENDPOINT, META_MODEL, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, REASONING_EFFORT, REQUEST_TIMEOUT_MS, RESPONSE_FORMAT,
-  RequestSchema, authorizedRecords, buildMessages, estimateTokens, validateOutput, type MetaOutput,
+  estimateTokens, prepareMessages, validateAuthorizedOutput, type MetaOutput,
 } from "./contract";
 import type { VerifiedFinding } from "./findings";
 import { buildVerifiedFacts, uncoveredRecordIds } from "./numericGrounding";
@@ -45,7 +48,7 @@ export function readUsage(body: { usage?: { prompt_tokens?: number; completion_t
 }
 
 /** Facts-only prompting is allowed only when every authorized record is represented by a verified fact. Otherwise nothing is sent. */
-export function factsBlockReason(records: EvidenceRecord[]): string | null {
+export function factsBlockReason(records: readonly EvidenceRecord[]): string | null {
   const facts = buildVerifiedFacts(records);
   const uncovered = uncoveredRecordIds(records, facts);
   if (facts.length === 0) return "Authorized evidence yields no verified facts; nothing sent.";
@@ -53,18 +56,44 @@ export function factsBlockReason(records: EvidenceRecord[]): string | null {
   return null;
 }
 
-export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch): Promise<MetaResult> {
+/** Everything the live path needs from the deployment: how a request becomes a trusted context, which evidence exists, who may see it,
+ * and the business vocabulary. The default is the prototype's; a real deployment supplies its own (server-side) implementations. */
+/** `factsBlockReason` for the live path: refuses evidence that did not come from `authorizeEvidence`. */
+export function authorizedFactsBlockReason(records: AuthorizedEvidence<PrototypeEvidence>): string | null {
+  assertAuthorized(records);
+  return factsBlockReason(records);
+}
+
+export interface EngineRuntime {
+  /** Turn an UNVERIFIED request into a trusted context and a dataset selector. The only place client input is read. */
+  resolve(input: unknown): ResolvedRequest;
+  store: EvidenceStore<PrototypeEvidence>;
+  policy: AccessPolicy<PrototypeEvidence>;
+  analysis: AnalysisContext;
+  question: string;
+}
+export const PROTOTYPE_RUNTIME: EngineRuntime = { resolve: resolveDemoRequest, store: demoEvidenceStore, policy: demoAccessPolicy, analysis: PROTOTYPE_CONTEXT, question: DEMO_QUESTION };
+
+export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fetch, runtime: EngineRuntime = PROTOTYPE_RUNTIME): Promise<MetaResult> {
   const st = metaStatus(env);
   if (!st.keyConfigured) return { state: "blocked", reason: "META_MODEL_API_KEY is not configured on the server.", requestSent: false };
   if (!st.ownerEnabled) return { state: "blocked", reason: "Owner activation flag META_MODEL_ENABLED is not 'true'.", requestSent: false };
-  const req = RequestSchema.safeParse(input);
-  if (!req.success) return { state: "blocked", reason: `Invalid request: ${req.error.issues.map((i) => i.message).join("; ")}`, requestSent: false };
+  const req = runtime.resolve(input);
+  if (!req.ok) return { state: "blocked", reason: req.reason, requestSent: false };
 
-  const records = authorizedRecords(req.data); // permission filtering BEFORE prompt
+  // Authorization BEFORE anything else touches the evidence. Tenant isolation is enforced inside authorizeEvidence, not by the store or policy.
+  let ctx: TrustedContext, records, withheld;
+  try {
+    ctx = req.ctx;
+    ({ authorized: records, withheld } = authorizeEvidence(ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
+  } catch (e) {
+    if (!(e instanceof AuthorizationError)) console.error("Evidence store error"); // category only: never the message, ids or labels
+    return { state: "blocked", reason: "Authorization failed; nothing sent.", requestSent: false };
+  }
   if (records.length === 0) return { state: "blocked", reason: "No records in authorized workspaces; nothing to send.", requestSent: false };
-  const unfit = factsBlockReason(records);
+  const unfit = authorizedFactsBlockReason(records);
   if (unfit) return { state: "blocked", reason: unfit, requestSent: false };
-  const messages = buildMessages(DEMO_QUESTION, records);
+  const messages = prepareMessages(runtime.question, records, runtime.analysis);
   const est = estimateTokens(JSON.stringify(messages));
   if (est > MAX_INPUT_TOKENS) return { state: "blocked", reason: `Estimated input ${est} tokens exceeds budget ${MAX_INPUT_TOKENS}.`, requestSent: false };
 
@@ -109,8 +138,7 @@ export async function runMeta(input: unknown, env: MetaEnv, fetchImpl: typeof fe
   if (choice?.finish_reason === "length") return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
   if (typeof choice?.message?.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
 
-  const all = SCENARIOS.find((s) => s.id === req.data.scenarioId)!.records;
-  const v = validateOutput(choice.message.content, records, all);
+  const v = validateAuthorizedOutput(choice.message.content, records, withheld, runtime.analysis);
   if (!v.ok) {
     console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
     return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };

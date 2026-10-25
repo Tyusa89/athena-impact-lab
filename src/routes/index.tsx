@@ -214,21 +214,21 @@ function Index() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Section title="Workspace visibility (simulated)" tag="no real auth">
-            <p className="mb-3 text-sm text-muted-foreground">Roles map to workspaces. Records outside visible workspaces are filtered <i>before</i> analysis, so they can never be cited. <b className="text-warning">This is a client-side simulation only. No real server authorization is provided</b>; anyone with the page code could read all synthetic records. A production system must enforce access on the server.</p>
+            <p className="mb-3 text-sm text-muted-foreground">Roles map to workspaces. Records outside visible workspaces are filtered <i>before</i> analysis, so they can never be cited. <b className="text-warning">This is a client-side simulation only. No real server authorization is provided</b>; anyone with the page code could read all synthetic records. The optional Meta path re-derives its scope on the server from a fixed demo role list, but there is no sign-in, so anyone can claim any role. Neither is production authorization; a production system must authenticate users and enforce access on the server.</p>
             <div className="flex flex-wrap gap-2">
               {WORKSPACES.map((w) => (
                 <button key={w.id} onClick={() => toggleWs(w.id)} className={`rounded-full border px-3 py-1 text-xs ${ws.includes(w.id) ? "border-accent bg-accent/15 text-accent" : "border-border text-muted-foreground line-through"}`}>{w.label}</button>
               ))}
             </div>
           </Section>
-          <Section title="Model provider" tag="interface only">
+          <Section title="Analysis source" tag="local by default">
             <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm">
               {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
             <p className="mt-3 text-sm text-muted-foreground">
               {provider.status === "active"
-                ? "Active: all output above comes from the deterministic rules engine."
-                : "Not configured. A future Meta model provider could plug into this interface. No API calls are made and no model output is shown or simulated. Analysis remains deterministic."}
+                ? "Active: all analysis above is computed locally by the deterministic rules engine in your browser. It makes no network or API calls."
+                : "Placeholder only: this summary-provider slot is not wired to any model, and selecting it changes nothing. Optional live Meta API analysis is a separate, off-by-default, per-run confirmed action in the comparison panel below. The analysis above stays local and deterministic."}
             </p>
           </Section>
         </div>
@@ -247,7 +247,7 @@ function Index() {
           </div>
         </Section>
 
-        <footer className="pb-6 text-center text-xs text-muted-foreground">Isolated prototype · synthetic data · no external connections</footer>
+        <footer className="pb-6 text-center text-xs text-muted-foreground">Isolated prototype · synthetic data · no EcoNest connection · analysis runs locally; the optional live Meta call is off by default</footer>
       </main>
     </div>
   );

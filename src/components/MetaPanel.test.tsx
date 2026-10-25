@@ -1,0 +1,186 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROLES, SCENARIOS } from "@/lib/athena/data";
+import { analyze } from "@/lib/athena/engine";
+
+// No network: the server functions are replaced by controllable fakes. Nothing here can reach the Meta API.
+const statusFn = vi.fn();
+const runFn = vi.fn();
+vi.mock("@tanstack/react-start", () => ({ useServerFn: (fn: unknown) => fn }));
+vi.mock("@/lib/athena/meta.functions", () => ({ getMetaStatus: (...a: unknown[]) => statusFn(...a), runMetaComparison: (...a: unknown[]) => runFn(...a) }));
+
+import { MetaPanel } from "./MetaPanel";
+import type { MetaResult } from "@/lib/athena/meta/adapter.server";
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+const ok = (text: string): MetaResult => ({
+  state: "ok", requestSent: true, authorizedIds: ["R1"],
+  output: { observations: [{ text, cited_ids: ["R1"] }], hypotheses: [], missing_evidence: [], recommendations: [] },
+});
+
+const scenario = SCENARIOS[0]!;
+const role = (id: string) => ROLES.find((r) => r.id === id)!;
+type Props = { scenarioId: string; roleId: string; workspaces: string[] };
+const exec: Props = { scenarioId: "baseline", roleId: "exec", workspaces: role("exec").workspaces };
+const finance: Props = { scenarioId: "baseline", roleId: "finance", workspaces: role("finance").workspaces };
+
+function ui(p: Props) {
+  return <MetaPanel {...p} analysis={analyze(scenario.records, p.workspaces)} />;
+}
+async function ready() {
+  await waitFor(() => expect(screen.getByRole("button", { name: /Run one Meta comparison/ })).toBeInTheDocument());
+}
+const confirmAndRun = async () => {
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: /Run one Meta comparison/ }));
+  await act(async () => {});
+};
+const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+beforeEach(() => {
+  statusFn.mockReset().mockResolvedValue({ keyConfigured: true, ownerEnabled: true, ready: true, model: "muse-spark-1.3", maxInputTokens: 3000, maxOutputTokens: 2000 });
+  runFn.mockReset();
+});
+afterEach(cleanup);
+
+describe("MetaPanel — stale responses", () => {
+  it("shows the response when nothing changed (control)", async () => {
+    const d = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(d.promise);
+    render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled();
+    await act(async () => { d.resolve(ok("exec answer")); await d.promise; });
+    expect(screen.getByText(/exec answer/)).toBeInTheDocument();
+  });
+
+  it("ignores a response that arrives after the role changed", async () => {
+    const d = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(d.promise);
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    rerender(ui(finance));
+    await flush();
+    await act(async () => { d.resolve(ok("STALE exec answer")); await d.promise; });
+    expect(screen.queryByText(/STALE exec answer/)).not.toBeInTheDocument();
+    expect(screen.getByText(/No Meta output for this role and scenario/)).toBeInTheDocument();
+  });
+
+  it("ignores a response that arrives after the scenario changed", async () => {
+    const d = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(d.promise);
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    rerender(ui({ ...exec, scenarioId: "ops-only" }));
+    await flush();
+    await act(async () => { d.resolve(ok("STALE baseline answer")); await d.promise; });
+    expect(screen.queryByText(/STALE baseline answer/)).not.toBeInTheDocument();
+  });
+
+  it("ignores a late failure after a state change (no stale error shown)", async () => {
+    const d = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(d.promise);
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    rerender(ui(finance));
+    await flush();
+    await act(async () => { d.reject(new Error("boom")); await d.promise.catch(() => {}); });
+    expect(screen.queryByText(/Server function failed/)).not.toBeInTheDocument();
+  });
+
+  it("clears an already-displayed result immediately when the role changes", async () => {
+    runFn.mockResolvedValueOnce(ok("exec answer"));
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    await waitFor(() => expect(screen.getByText(/exec answer/)).toBeInTheDocument());
+    rerender(ui(finance));
+    expect(screen.queryByText(/exec answer/)).not.toBeInTheDocument();
+    // Switching back must not resurrect the old result either.
+    rerender(ui(exec));
+    await flush();
+    expect(screen.queryByText(/exec answer/)).not.toBeInTheDocument();
+  });
+
+  it("does not leave the panel stuck in Running after a state change", async () => {
+    runFn.mockReturnValueOnce(new Promise(() => {})); // never settles
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled();
+    rerender(ui(finance));
+    await flush();
+    expect(screen.getByRole("button", { name: /Run one Meta comparison/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).not.toBeChecked(); // confirmation must be re-given per role/scenario
+  });
+
+  it("overlapping requests: the earlier request resolving last cannot overwrite the current one", async () => {
+    const a = deferred<MetaResult>();
+    const b = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun(); // request A (exec)
+    rerender(ui(finance));
+    await flush();
+    await confirmAndRun(); // request B (finance)
+    expect(runFn).toHaveBeenCalledTimes(2);
+    expect(runFn.mock.calls[1]![0]).toEqual({ data: { scenarioId: "baseline", roleId: "finance", ownerConfirmed: true } });
+    await act(async () => { b.resolve(ok("finance answer")); await b.promise; });
+    await act(async () => { a.resolve(ok("STALE exec answer")); await a.promise; });
+    expect(screen.getByText(/finance answer/)).toBeInTheDocument();
+    expect(screen.queryByText(/STALE exec answer/)).not.toBeInTheDocument();
+  });
+
+  it("overlapping requests: the earlier request resolving first is also discarded", async () => {
+    const a = deferred<MetaResult>();
+    const b = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const { rerender } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    rerender(ui(finance));
+    await flush();
+    await confirmAndRun();
+    await act(async () => { a.resolve(ok("STALE exec answer")); await a.promise; });
+    expect(screen.queryByText(/STALE exec answer/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled(); // B still in flight
+    await act(async () => { b.resolve(ok("finance answer")); await b.promise; });
+    expect(screen.getByText(/finance answer/)).toBeInTheDocument();
+  });
+
+  it("does not apply a response after unmount", async () => {
+    const d = deferred<MetaResult>();
+    runFn.mockReturnValueOnce(d.promise);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = render(ui(exec));
+    await ready();
+    await confirmAndRun();
+    unmount();
+    await act(async () => { d.resolve(ok("late")); await d.promise; });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe("MetaPanel — labels", () => {
+  it("distinguishes local deterministic analysis from optional live Meta analysis, and keeps the role warning", async () => {
+    render(ui(exec));
+    await ready();
+    expect(screen.getByText(/Local deterministic analysis/)).toBeInTheDocument();
+    expect(screen.getByText(/no network/)).toBeInTheDocument();
+    expect(screen.getByText(/Optional live Meta API analysis/)).toBeInTheDocument();
+    expect(screen.getByText(/off by default/)).toBeInTheDocument();
+    expect(screen.getByText(/It is a paid call/)).toBeInTheDocument();
+    expect(screen.getByText(/NOT REAL AUTHORIZATION/)).toBeInTheDocument();
+  });
+});

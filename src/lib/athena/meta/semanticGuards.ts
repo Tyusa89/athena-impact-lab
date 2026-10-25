@@ -15,7 +15,9 @@
 //   - Magnitude words are checked only where they describe a metric's performance; "twice a week", "split in half",
 //     "a dozen customers" and "a third option" are ordinary process language.
 //   - Messages never echo model text, record ids, source labels or the names of unauthorized metrics/departments.
-import { METRIC_LABELS, type Department, type EvidenceRecord, type MetricKey } from "../data";
+import { goodDirection, metricLabel, type Catalog, type DomainIdOf, type MetricKeyOf } from "../core/catalog";
+import type { EvidenceRecord } from "../data";
+import { PROTOTYPE_CATALOG } from "../prototypeCatalog";
 import { INVISIBLE_CHARS, type VerifiedFact } from "./numericGrounding";
 
 export type Lane = "interpretation" | "recommendation" | "gap";
@@ -47,49 +49,37 @@ export function semanticText(t: string): string {
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ------------------------------------------------------------------ entities (metrics and departments)
-const METRIC_TERMS: Record<MetricKey, string[]> = {
-  leads: ["lead volume", "lead count", "lead generation", "lead flow", "lead inflow", "inbound leads", "new leads", "leads"],
-  mql_rate: ["marketing qualified leads", "qualified leads", "qualified lead", "lead quality", "mql rate", "mqls", "mql"],
-  conversion_rate: ["conversion rate", "conversion rates", "conversions", "conversion"],
-  closed_deals: ["closed deals", "closed won", "deals closed", "won deals", "deal volume", "deal count", "closings", "deals"],
-  fulfillment_days: ["fulfillment time", "fulfillment times", "fulfilment time", "fulfilment times", "fulfillment", "fulfilment", "delivery time", "delivery times", "shipping time", "shipping times"],
-  backorder_rate: ["backorder rate", "backorders", "backorder", "back order", "back orders"],
-  revenue: ["recognized revenue", "recognised revenue", "revenue", "top line"],
-  cac: ["customer acquisition cost", "customer acquisition costs", "acquisition cost", "acquisition costs", "cost per acquisition", "cac"],
-};
-const DEPT_TERMS: Record<Department, string[]> = {
-  Marketing: ["marketing", "campaigns", "campaign", "advertising", "paid social", "paid media", "ad spend", "ad spending"],
-  Sales: ["sales team", "sales teams", "sales pipeline", "sales reps", "salespeople", "sales", "pipeline"],
-  Operations: ["operations", "operational", "warehouse", "logistics", "supply chain", "suppliers", "supplier", "inventory"],
-  Finance: ["finance", "financial", "accounting", "ledger", "budgets", "budget"],
-};
 /** The department that owns each metric. Used to tell "not authorized" from "authorized but no data in this scenario". */
-export const METRIC_DEPARTMENT: Record<MetricKey, Department> = {
-  leads: "Marketing", mql_rate: "Marketing", cac: "Marketing",
-  conversion_rate: "Sales", closed_deals: "Sales",
-  fulfillment_days: "Operations", backorder_rate: "Operations",
-  revenue: "Finance",
-};
-/** Good direction per metric, for valence words ("improved", "weakened"). */
-const GOOD: Record<MetricKey, Dir> = { leads: "up", mql_rate: "up", conversion_rate: "up", closed_deals: "up", revenue: "up", fulfillment_days: "down", backorder_rate: "down", cac: "down" };
+export const departmentByMetric = <C extends Catalog>(c: C) => Object.fromEntries(c.metrics.map((m) => [m.key, m.domain])) as Record<MetricKeyOf<C>, DomainIdOf<C>>;
+/** The prototype's metric → department map (kept for callers and tests that reason about the bundled scenarios). */
+export const METRIC_DEPARTMENT = departmentByMetric(PROTOTYPE_CATALOG);
 
-type Entity = { kind: "metric"; key: MetricKey; start: number; end: number } | { kind: "dept"; key: Department; start: number; end: number };
-const TERM_LIST: { term: string; kind: "metric" | "dept"; key: string }[] = [
-  ...Object.entries(METRIC_TERMS).flatMap(([k, ts]) => ts.map((term) => ({ term, kind: "metric" as const, key: k }))),
-  ...Object.entries(DEPT_TERMS).flatMap(([k, ts]) => ts.map((term) => ({ term, kind: "dept" as const, key: k }))),
-].sort((a, b) => b.term.length - a.term.length);
-const TERM_RES = TERM_LIST.map((t) => ({ ...t, re: new RegExp(`\\b${esc(t.term)}\\b`, "g") }));
+type Entity = { kind: "metric" | "dept"; key: string; start: number; end: number };
+/** Term table built from a catalog's aliases: longest phrase first (stable, so ties keep catalog order), whole-word matching. */
+const termTables = new WeakMap<Catalog, { kind: "metric" | "dept"; key: string; re: RegExp }[]>();
+function termTable(c: Catalog) {
+  let t = termTables.get(c);
+  if (!t) {
+    const list = [
+      ...c.metrics.flatMap((m) => m.aliases.map((term) => ({ term, kind: "metric" as const, key: m.key }))),
+      ...c.domains.flatMap((d) => d.aliases.map((term) => ({ term, kind: "dept" as const, key: d.id }))),
+    ].sort((a, b) => b.term.length - a.term.length);
+    t = list.map((x) => ({ kind: x.kind, key: x.key, re: new RegExp(`\\b${esc(x.term)}\\b`, "g") }));
+    termTables.set(c, t);
+  }
+  return t;
+}
 
-function findEntities(text: string): Entity[] {
+function findEntities(text: string, catalog: Catalog): Entity[] {
   const taken: [number, number][] = [];
   const out: Entity[] = [];
-  for (const t of TERM_RES) {
+  for (const t of termTable(catalog)) {
     t.re.lastIndex = 0;
     for (let m = t.re.exec(text); m; m = t.re.exec(text)) {
       const start = m.index, end = start + m[0].length;
       if (taken.some(([a, b]) => start < b && end > a)) continue;
       taken.push([start, end]);
-      out.push({ kind: t.kind, key: t.key, start, end } as Entity);
+      out.push({ kind: t.kind, key: t.key, start, end });
     }
   }
   return out.sort((a, b) => a.start - b.start);
@@ -241,12 +231,12 @@ function isAmbiguous(es: Entity[], h: number, clause: string): boolean {
 }
 
 /** Directional claims in a text, each bound to the metric/department entities it describes. */
-export function directionalClaims(text: string, lane: Lane): Claim[] {
+export function directionalClaims(text: string, lane: Lane, catalog: Catalog = PROTOTYPE_CATALOG): Claim[] {
   const claims: Claim[] = [];
   const interp = lane === "interpretation";
   for (const c of clausesOf(semanticText(text).replace(APPOSITIVE, " "))) {
     if (c.conditional) continue;
-    const es = findEntities(c.text);
+    const es = findEntities(c.text, catalog);
     if (!es.length) continue;
     WORD_RE.lastIndex = 0;
     for (let m = WORD_RE.exec(c.text); m; m = WORD_RE.exec(c.text)) {
@@ -312,7 +302,7 @@ export function directionalClaims(text: string, lane: Lane): Claim[] {
       if (w.dir) claims.push({ entities: chain, dir: w.dir, negated, word, forward });
       else for (const e of chain) {
         if (e.kind !== "metric") { claims.push({ entities: [e], dir: w.val === "good" ? "up" : "down", negated, word, forward }); continue; }
-        const good = GOOD[e.key];
+        const good: Dir = goodDirection(catalog, e.key);
         const bad: Dir = good === "up" ? "down" : "up";
         claims.push({ entities: [e], dir: w.val === "good" ? good : bad, negated, word, forward });
       }
@@ -353,13 +343,13 @@ const MOVEMENT_CONTEXT = new RegExp(`\\b(?:${WORD_KEYS.join("|")}|up|down|reduce
  * Proposed actions and gaps (narrower, to spare process instructions): the CLAUSE must mention a metric AND a movement/target word,
  * so "Review revenue twice a week" or "Pull a hundred records" pass while "Reduce backorders by half" does not.
  */
-export function magnitudeExpressions(text: string, lane: Lane = "interpretation"): string[] {
+export function magnitudeExpressions(text: string, lane: Lane = "interpretation", catalog: Catalog = PROTOTYPE_CATALOG): string[] {
   const t = semanticText(text);
   const kinds = new Set<string>();
   for (const p of MAGNITUDE_PATTERNS) if (p.ctx === "always" && p.re.test(t)) kinds.add(p.kind);
   const units = lane === "interpretation" ? t.split(/[.!?;\n]+/).map((s) => s.trim()).filter(Boolean) : clausesOf(t).map((c) => c.text);
   for (const unit of units) {
-    const hasMetric = findEntities(unit).some((e) => e.kind === "metric");
+    const hasMetric = findEntities(unit, catalog).some((e) => e.kind === "metric");
     if (!hasMetric || (lane !== "interpretation" && !MOVEMENT_CONTEXT.test(unit))) continue;
     for (const p of MAGNITUDE_PATTERNS) if (p.ctx === "metric" && p.re.test(unit)) kinds.add(p.kind);
   }
@@ -371,33 +361,34 @@ export interface SemanticScope {
   /** Verified facts for the role (authorized AND with data). */
   facts: readonly VerifiedFact[];
   /** Departments the role is authorized for (from its authorized records). */
-  departments: ReadonlySet<Department>;
+  departments: ReadonlySet<string>;
+  /** The business vocabulary the text is read against. */
+  catalog: Catalog;
 }
-export function semanticScope(authorized: readonly EvidenceRecord[], facts: readonly VerifiedFact[]): SemanticScope {
-  return { facts, departments: new Set(authorized.map((r) => r.department)) };
+export function semanticScope(authorized: readonly EvidenceRecord[], facts: readonly VerifiedFact[], catalog: Catalog = PROTOTYPE_CATALOG): SemanticScope {
+  return { facts, departments: new Set(authorized.map((r) => r.department)), catalog };
 }
 /** `domain`: not authorized. `unavailable`: authorized but no verified data in this scenario. Messages never name unauthorized things or echo model text. */
 export interface SemanticIssue { code: "magnitude" | "direction" | "domain" | "unavailable"; message: string }
-
-const label = (m: MetricKey) => METRIC_LABELS[m];
 
 /** All semantic-guard issues for one text. Empty when the text passes. `where` is a safe locator such as "interpretation 2". */
 export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, where = "text"): SemanticIssue[] {
   const issues: SemanticIssue[] = [];
   const seen = new Set<string>();
   const push = (i: SemanticIssue) => { if (!seen.has(i.message)) { seen.add(i.message); issues.push(i); } };
-  for (const kind of magnitudeExpressions(text, lane)) push({ code: "magnitude", message: `Semantic guard (magnitude): ${where} contains an unsupported ${kind} expression; numbers and magnitudes appear only in Athena-computed findings` });
-  const byMetric = new Map(scope.facts.map((f) => [f.metric, f]));
-  for (const claim of directionalClaims(text, lane)) {
+  for (const kind of magnitudeExpressions(text, lane, scope.catalog)) push({ code: "magnitude", message: `Semantic guard (magnitude): ${where} contains an unsupported ${kind} expression; numbers and magnitudes appear only in Athena-computed findings` });
+  const byMetric = new Map<string, VerifiedFact>(scope.facts.map((f) => [f.metric, f]));
+  const deptOf: Record<string, string> = departmentByMetric(scope.catalog);
+  for (const claim of directionalClaims(text, lane, scope.catalog)) {
     for (const e of claim.entities) {
       const claimText = `${claim.negated ? "not " : ""}${claim.dir}`;
-      const dept: Department = e.kind === "metric" ? METRIC_DEPARTMENT[e.key] : e.key;
+      const dept = e.kind === "metric" ? deptOf[e.key]! : e.key;
       if (!scope.departments.has(dept)) {
         push({ code: "domain", message: `Semantic guard (domain): ${where} makes a directional claim about a metric or department outside this role's authorized scope` });
       } else if (e.kind === "metric") {
         const f = byMetric.get(e.key);
         if (!f) push({ code: "unavailable", message: `Semantic guard (unavailable data): ${where} makes a directional claim about a metric for which no verified data is available in this scenario` });
-        else if (!claim.forward && contradicts(claim, f.direction)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${label(e.key)} is ${claimText}, but the verified finding is ${f.direction}` });
+        else if (!claim.forward && contradicts(claim, f.direction)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is ${f.direction}` });
       }
     }
   }

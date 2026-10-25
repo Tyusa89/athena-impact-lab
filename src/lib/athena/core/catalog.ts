@@ -39,6 +39,7 @@ export type DomainIdOf<C extends Catalog> = C["domains"][number]["id"];
 interface Index { metrics: ReadonlyMap<string, MetricDef>; domains: ReadonlyMap<string, DomainDef> }
 const indexes = new WeakMap<Catalog, Index>();
 function indexOf(c: Catalog): Index {
+  assertCatalog(c);
   let ix = indexes.get(c);
   if (!ix) { ix = { metrics: new Map(c.metrics.map((m) => [m.key, m])), domains: new Map(c.domains.map((d) => [d.id, d])) }; indexes.set(c, ix); }
   return ix;
@@ -60,8 +61,44 @@ const KEY_RE = /^[a-z][a-z0-9_]*$/;
 /** Fact ids are "F-<key>" and model refs are capped at 40 characters. */
 const MAX_KEY = 38;
 
-/** Structural problems that would make the catalog ambiguous or unsafe to use. Empty when the catalog is sound. Messages are for developers. */
+const POLARITIES: readonly string[] = ["higher_is_better", "lower_is_better"];
+const AGGREGATIONS: readonly string[] = ["sum", "average", "rate", "ratio", "snapshot"];
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const isStringArray = (x: unknown): x is string[] => Array.isArray(x) && x.every((v) => typeof v === "string");
+/** Own accessor properties could return a different value on each read, which would defeat both validation and freezing. */
+const hasAccessor = (o: object) => Object.values(Object.getOwnPropertyDescriptors(o)).some((d) => "get" in d || "set" in d);
+
+/** The catalog must be plain data of the declared shape. Checked before anything else reads it. */
+function shapeProblems(c: unknown): string[] {
+  if (!isRecord(c)) return ["catalog must be an object"];
+  const out: string[] = [];
+  if (hasAccessor(c)) out.push("catalog must not have accessor properties");
+  if (typeof c["flatThresholdPct"] !== "number") out.push("flatThresholdPct must be a number");
+  const { metrics, domains } = c;
+  if (!Array.isArray(metrics)) out.push("metrics must be an array");
+  else metrics.forEach((m, i) => {
+    if (!isRecord(m)) { out.push(`metrics[${i}] must be an object`); return; }
+    if (hasAccessor(m)) out.push(`metrics[${i}] must not have accessor properties`);
+    for (const k of ["key", "label", "domain", "unit"]) if (typeof m[k] !== "string") out.push(`metrics[${i}].${k} must be a string`);
+    if (typeof m["polarity"] !== "string" || !POLARITIES.includes(m["polarity"])) out.push(`metrics[${i}].polarity must be one of ${POLARITIES.join(", ")}`);
+    if (typeof m["aggregation"] !== "string" || !AGGREGATIONS.includes(m["aggregation"])) out.push(`metrics[${i}].aggregation must be one of ${AGGREGATIONS.join(", ")}`);
+    if (!isStringArray(m["aliases"])) out.push(`metrics[${i}].aliases must be an array of strings`);
+  });
+  if (!Array.isArray(domains)) out.push("domains must be an array");
+  else domains.forEach((d, i) => {
+    if (!isRecord(d)) { out.push(`domains[${i}] must be an object`); return; }
+    if (hasAccessor(d)) out.push(`domains[${i}] must not have accessor properties`);
+    if (typeof d["id"] !== "string") out.push(`domains[${i}].id must be a string`);
+    if (!isStringArray(d["aliases"])) out.push(`domains[${i}].aliases must be an array of strings`);
+  });
+  return out;
+}
+
+/** Structural problems that would make the catalog ambiguous or unsafe to use. Empty when the catalog is sound. Messages are for developers.
+ * Pure: it does not freeze or mark the catalog. Use `assertCatalog` for the checked, immutable form every entry point requires. */
 export function validateCatalog(c: Catalog): string[] {
+  const shape = shapeProblems(c);
+  if (shape.length) return shape;
   const problems: string[] = [];
   const keys = new Set<string>(), ids = new Set<string>();
   for (const d of c.domains) {
@@ -90,4 +127,26 @@ export function validateCatalog(c: Catalog): string[] {
   for (const d of c.domains) for (const a of d.aliases) claim(a, `domain:${d.id}`);
   if (!(c.flatThresholdPct >= 0)) problems.push("flatThresholdPct must be a non-negative number");
   return problems;
+}
+
+const validated = new WeakSet<Catalog>();
+function deepFreeze(x: unknown, seen = new Set<object>()): void {
+  if (typeof x !== "object" || x === null || seen.has(x)) return;
+  seen.add(x);
+  Object.freeze(x);
+  for (const v of Object.values(x)) deepFreeze(v, seen); // always recurse: an outer object the caller froze may still hold mutable parts
+}
+
+/**
+ * The invariant every analysis entry point relies on: a catalog it reads has passed `validateCatalog` and is deeply frozen.
+ * The first call validates (throwing on any problem; a rejected catalog is never remembered as valid) and then freezes it in
+ * place; later calls are a set lookup. Because it can no longer change, indexes and term tables cached against it cannot go stale.
+ * To use a different vocabulary, build a new catalog object.
+ */
+export function assertCatalog(c: Catalog): void {
+  if (validated.has(c)) return;
+  const problems = validateCatalog(c);
+  if (problems.length) throw new Error(`Invalid catalog: ${problems.join("; ")}`);
+  deepFreeze(c);
+  validated.add(c);
 }

@@ -1,6 +1,6 @@
 // Verified-fact calculation, parameterized by a catalog and a pair of reporting periods. Pure and dependency-free.
 // This is the single place where a prior/current pair of records becomes a fact, a direction and a rendered change.
-import { metricDef, type Catalog } from "./catalog";
+import { assertCatalog, metricDef, type Catalog } from "./catalog";
 
 /** The minimum a record must carry to be compared across periods. `department` holds the id of the record's catalog domain. */
 export interface CoreRecord {
@@ -40,9 +40,11 @@ export interface CoreFact<M extends string = string, D extends string = string> 
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-/** One fact per catalog metric that has exactly one prior and one current record with matching unit and domain.
- * Anything ambiguous, mismatched or outside the catalog yields no fact (fail closed; the coverage guard then blocks sending). */
+/** One fact per catalog metric that has exactly one prior and one current record, both in the metric's catalog domain and unit.
+ * Anything ambiguous, outside the catalog, or disagreeing with the catalog's definition (even if the two records agree with each
+ * other) yields no fact: fail closed, and the coverage guard then blocks sending. Throws if the catalog is invalid. */
 export function computeFacts<R extends CoreRecord>(records: readonly R[], ctx: AnalysisContext): CoreFact<R["metric"], R["department"]>[] {
+  assertCatalog(ctx.catalog);
   const keys = Array.from(new Set(records.map((r) => r.metric)));
   const facts: CoreFact<R["metric"], R["department"]>[] = [];
   for (const m of keys) {
@@ -52,7 +54,7 @@ export function computeFacts<R extends CoreRecord>(records: readonly R[], ctx: A
     const cs = records.filter((r) => r.metric === m && r.period === "current");
     if (ps.length !== 1 || cs.length !== 1) continue; // require exactly one pair; ambiguity → no fact
     const p = ps[0]!, c = cs[0]!;
-    if (p.unit !== c.unit || p.department !== c.department) continue;
+    if (p.unit !== def.unit || c.unit !== def.unit || p.department !== def.domain || c.department !== def.domain) continue; // the catalog decides, not the records
     const changePct = p.value === 0 ? null : r1(((c.value - p.value) / p.value) * 100);
     const changePp = c.unit === "%" ? r1(c.value - p.value) : null;
     const direction: Direction = changePct === null || Math.abs(changePct) < ctx.catalog.flatThresholdPct ? "flat" : changePct > 0 ? "up" : "down";

@@ -60,14 +60,16 @@ export function supportingIdsFor(refs: readonly string[], facts: readonly Verifi
 /** Legitimate period references: "Q3 2026", "2026 Q3", "FY2026"/"fiscal 2026", and a bare "in/during 2026" only when it ends the clause
  * (so "in 2026 units" or "in 2026 dollars" is NOT exempt). Only years that appear in the authorized reporting-period labels
  * (e.g. "Q2 2026" -> 2026) can be exempt, and only as a period reference. Any other year-shaped number is an ordinary numeral. */
-const periodRefs = new WeakMap<PeriodPair, RegExp>();
+/** Keyed by the label text itself (not the object), so a caller that changes the labels in place can never get a stale expression. */
+const periodRefs = new Map<string, RegExp>();
 function periodRef(periods: PeriodPair): RegExp {
-  let re = periodRefs.get(periods);
+  const key = `${periods.prior.label}\u0000${periods.current.label}`;
+  let re = periodRefs.get(key);
   if (!re) {
     const years = [...new Set([periods.prior.label, periods.current.label].flatMap((l) => l.match(/\b20\d{2}\b/g) ?? []))];
     const Y = years.length ? `(?:${years.join("|")})` : "(?!)";
     re = new RegExp(`\\bq[1-4]\\s+${Y}\\b|\\b${Y}\\s+q[1-4]\\b|\\b(?:fy|fiscal)\\s*${Y}\\b|\\b(?:in|during)\\s+${Y}\\b(?=\\s*(?:[.,;:!?)]|$))`, "gi");
-    periodRefs.set(periods, re);
+    periodRefs.set(key, re);
   }
   return re;
 }

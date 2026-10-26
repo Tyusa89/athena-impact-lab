@@ -7,6 +7,7 @@ import type { AnalysisContext } from "../core/facts";
 import { PROTOTYPE_CONTEXT } from "../engine";
 import { authorizeDemo, type MetaRequest, type PrototypeEvidence } from "../prototypeAdapter";
 import * as a from "./analysis";
+import { prototypeDiscoverable } from "./semanticGuards";
 
 export * from "./analysis";
 // Engine limits (provider-neutral) live in ./limits; re-exported so existing imports keep working.
@@ -22,6 +23,7 @@ export function authorizedRecords(req: Pick<MetaRequest, "scenarioId" | "roleId"
   return authorizeDemo(req).authorized;
 }
 export const buildMessages = (question: string, records: readonly EvidenceLike[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) => a.buildMessages(question, records, ctx);
-export const validateOutput = (raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) => a.validateOutput(raw, authorized, allRecords, ctx);
+// The prototype facade states the demo policy's grant explicitly (see `prototypeDiscoverable`); the generic `a.validateOutput` defaults to metrics with verified data only.
+export const validateOutput = (raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext = PROTOTYPE_CONTEXT, discoverable: Iterable<string> = prototypeDiscoverable(authorized, ctx.catalog)) => a.validateOutput(raw, authorized, allRecords, ctx, { discoverable });
 export const prepareMessages = <E extends Evidence>(question: string, authorized: AuthorizedEvidence<E>, ctx: AnalysisContext = PROTOTYPE_CONTEXT) => a.prepareMessages(question, authorized, ctx);
-export const validateAuthorizedOutput = <E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext = PROTOTYPE_CONTEXT) => a.validateAuthorizedOutput(raw, authorized, withheld, ctx);
+export const validateAuthorizedOutput = <E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext = PROTOTYPE_CONTEXT, discoverable: Iterable<string> = prototypeDiscoverable(authorized, ctx.catalog)) => a.validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable });

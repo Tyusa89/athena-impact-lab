@@ -9,7 +9,8 @@ import type { AnalysisContext } from "../core/facts";
 import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./grounding";
 import { LIMITS } from "./limits";
 import { renderFindings, type VerifiedFinding } from "./render";
-import { checkSemantics, semanticScope } from "./semantic";
+import { checkSemantics, semanticScope, type SemanticScopeOptions } from "./semantic";
+import { UNSAFE_MESSAGE, unsafeTextKinds } from "./textSafety";
 
 /** Rough, conservative token estimate (~3 chars/token). */
 export const estimateTokens = (s: string) => Math.ceil(s.length / 3);
@@ -103,7 +104,7 @@ function isLegacyShape(json: unknown): boolean {
  * Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy and semantic guards.
  * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
  */
-export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext): ValidationResult {
+export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}): ValidationResult {
   assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
@@ -130,11 +131,14 @@ export function validateOutput(raw: string, authorized: readonly EvidenceLike[],
     ...out.recommendations.map((x, i) => ({ text: x.text, lane: "recommendation" as const, where: `proposed action ${i + 1}` })),
     ...out.missing_evidence.map((t, i) => ({ text: t, lane: "gap" as const, where: `gap ${i + 1}` })),
   ];
+  // Links, markup, code and commands are never plain business prose: reject (category and location only; the text is never echoed).
+  for (const l of lanes) if (unsafeTextKinds(l.text).length) issues.push({ code: "unsafe", message: UNSAFE_MESSAGE(l.where) });
   for (const l of lanes) if (hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
   const recordIds = allRecords.map((r) => r.id);
   for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds, ctx.periods)) issues.push({ code: "numeral", message });
   // Semantic guards: directional contradictions, magnitude expressions, unauthorized or unavailable domains. Reject, never rewrite.
-  const scope = semanticScope(authorized, facts, ctx.catalog);
+  // Scope is metric-level: metrics with verified data plus what the access-policy layer explicitly granted. Not inferred from departments.
+  const scope = semanticScope(authorized, facts, ctx.catalog, scopeOpts);
   for (const l of lanes) for (const i of checkSemantics(l.text, l.lane, scope, l.where)) issues.push({ code: i.code, message: i.message });
   if (issues.length) return fail(...issues);
   const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
@@ -151,7 +155,7 @@ export function prepareMessages<E extends Evidence>(question: string, authorized
   return buildMessages(question, authorized, ctx, subject);
 }
 /** Output validation for the live path. `withheld` is the server-side set of records the caller may not see (their identifiers must not appear in model text). */
-export function validateAuthorizedOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext): ValidationResult {
+export function validateAuthorizedOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}): ValidationResult {
   assertAuthorized(authorized);
-  return validateOutput(raw, authorized, [...authorized, ...withheld], ctx);
+  return validateOutput(raw, authorized, [...authorized, ...withheld], ctx, scopeOpts);
 }

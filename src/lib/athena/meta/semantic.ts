@@ -83,6 +83,12 @@ function findEntities(text: string, catalog: Catalog): Entity[] {
   return out.sort((a, b) => a.start - b.start);
 }
 
+/** Every catalog metric or department mentioned in text, as `{kind, key}` (whole-word alias matches). Used by the scope check. */
+export function mentionedEntities(text: string, catalog: Catalog): { kind: "metric" | "dept"; key: string }[] {
+  assertCatalog(catalog);
+  return findEntities(semanticText(text), catalog).map((e) => ({ kind: e.kind, key: e.key }));
+}
+
 /** Catalog metrics and domains mentioned in free text (whole-word alias matches, longest phrase first). Used to focus a deterministic analysis on what a question
  * is about. It selects among things the caller is already authorized for; it never reaches evidence itself. */
 export function mentionedIn(text: string, catalog: Catalog): { metrics: string[]; domains: string[] } {
@@ -372,39 +378,69 @@ export function magnitudeExpressions(text: string, lane: Lane, catalog: Catalog)
 export interface SemanticScope {
   /** Verified facts for the role (authorized AND with data). */
   facts: readonly VerifiedFact[];
-  /** Departments the role is authorized for (from its authorized records). */
+  /** Metric keys the role may DISCOVER: metrics with verified data, plus metrics the access-policy layer explicitly granted (`EvidenceScope.discoverableMetrics`).
+   * Never inferred from the department of another metric. A hand-built scope that lacks this set discovers nothing (fail closed). */
+  discoverable?: ReadonlySet<string>;
+  /** Departments the role may name: those that own at least one discoverable metric. Informational: `checkSemantics` derives it from `discoverable` and never reads this field. */
   departments: ReadonlySet<string>;
   /** The business vocabulary the text is read against. */
   catalog: Catalog;
+  /** When true, ANY mention of a non-discoverable metric or department is rejected. When false (the legacy default), a neutral mention of a metric in a department
+   * the role has no access to at all stays allowed (gaps, hand-offs), but a metric in a department the role does access, which it may not discover, is always rejected. */
+  strictMentions?: boolean;
 }
-export function semanticScope(authorized: readonly EvidenceLike[], facts: readonly VerifiedFact[], catalog: Catalog): SemanticScope {
+export interface SemanticScopeOptions {
+  /** Explicit metric-level grant from the access-policy layer. Unknown keys are ignored. Absent: only metrics with verified facts are discoverable. */
+  discoverable?: Iterable<string> | undefined;
+  strictMentions?: boolean | undefined;
+}
+export function semanticScope(authorized: readonly EvidenceLike[], facts: readonly VerifiedFact[], catalog: Catalog, opts: SemanticScopeOptions = {}): SemanticScope {
   assertCatalog(catalog);
-  return { facts, departments: new Set(authorized.map((r) => r.department)), catalog };
+  void authorized; // record membership grants nothing by itself: authorization to discover a metric is not inferred from which department's records happen to be present
+  const known = new Set(catalog.metrics.map((m) => m.key));
+  const discoverable = new Set<string>([...facts.map((f) => f.metric), ...[...(opts.discoverable ?? [])].filter((k) => known.has(k))].filter((k) => known.has(k)));
+  const owner = departmentByMetric(catalog) as Record<string, string>;
+  return { facts, discoverable, departments: new Set([...discoverable].map((k) => owner[k]!)), catalog, strictMentions: opts.strictMentions === true };
 }
-/** `domain`: not authorized. `unavailable`: authorized but no verified data in this scenario. Messages never name unauthorized things or echo model text. */
+/** `domain`: outside the role's discoverable scope (a hidden metric or department; the SAME code and wording whether the metric is in another department or the role's own).
+ * `unavailable`: a metric the policy lets the role discover, with no verified data in this scenario. Messages never name unauthorized things or echo model text. */
 export interface SemanticIssue { code: "magnitude" | "direction" | "domain" | "unavailable"; message: string }
+
+/** One fixed wording for every scope violation, so the response cannot tell a hidden metric of the role's own department from one elsewhere, or a claim from a mention. */
+const SCOPE_MESSAGE = (where: string) => `Semantic guard (domain): ${where} refers to a metric or department outside this role's authorized scope`;
+const DOMAIN_MESSAGE = (where: string) => `Semantic guard (domain): ${where} makes a directional claim about a metric or department outside this role's authorized scope`;
 
 /** All semantic-guard issues for one text. Empty when the text passes. `where` is a safe locator such as "interpretation 2". */
 export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, where = "text"): SemanticIssue[] {
   assertCatalog(scope.catalog); // a hand-built scope is checked too
+  const discoverable = scope.discoverable instanceof Set ? scope.discoverable : new Set<string>(); // a malformed hand-built scope discovers nothing
+  const owner: Record<string, string> = departmentByMetric(scope.catalog);
+  const departments = new Set<string>([...discoverable].map((k) => owner[k]).filter((d): d is string => !!d));
   const issues: SemanticIssue[] = [];
   const seen = new Set<string>();
   const push = (i: SemanticIssue) => { if (!seen.has(i.message)) { seen.add(i.message); issues.push(i); } };
   for (const kind of magnitudeExpressions(text, lane, scope.catalog)) push({ code: "magnitude", message: `Semantic guard (magnitude): ${where} contains an unsupported ${kind} expression; numbers and magnitudes appear only in Athena-computed findings` });
   const byMetric = new Map<string, VerifiedFact>(scope.facts.map((f) => [f.metric, f]));
-  const deptOf: Record<string, string> = departmentByMetric(scope.catalog);
+  const hidden = (e: { kind: string; key: string }) => (e.kind === "metric" ? !discoverable.has(e.key) : !departments.has(e.key));
+  // A hidden metric inside a department the role DOES have access to is never mentionable (that department is not "elsewhere"); a hidden metric or department in a
+  // department the role has no access to at all may be mentioned neutrally unless the scope is strict.
+  const sameDepartment = (e: { kind: string; key: string }) => e.kind === "metric" && departments.has(owner[e.key]!);
+  const claimed = new Set<string>();
   for (const claim of directionalClaims(text, lane, scope.catalog)) {
     for (const e of claim.entities) {
+      claimed.add(`${e.kind}:${e.key}`);
       const claimText = `${claim.negated ? "not " : ""}${claim.dir}`;
-      const dept = e.kind === "metric" ? deptOf[e.key]! : e.key;
-      if (!scope.departments.has(dept)) {
-        push({ code: "domain", message: `Semantic guard (domain): ${where} makes a directional claim about a metric or department outside this role's authorized scope` });
-      } else if (e.kind === "metric") {
+      if (hidden(e)) push({ code: "domain", message: DOMAIN_MESSAGE(where) });
+      else if (e.kind === "metric") {
         const f = byMetric.get(e.key);
         if (!f) push({ code: "unavailable", message: `Semantic guard (unavailable data): ${where} makes a directional claim about a metric for which no verified data is available in this scenario` });
         else if (!claim.forward && contradicts(claim, f.direction)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is ${f.direction}` });
       }
     }
+  }
+  for (const e of mentionedEntities(text, scope.catalog)) {
+    if (claimed.has(`${e.kind}:${e.key}`) || !hidden(e)) continue;
+    if (scope.strictMentions === true || sameDepartment(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
   }
   return issues;
 }

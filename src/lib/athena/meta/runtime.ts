@@ -110,7 +110,7 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
   if (notReady) return { state: "blocked", reason: describeBlock(notReady, label), requestSent: false };
   const prep = await authorizeRequest(input, runtime);
   if (!prep.ok) return { state: "blocked", reason: prep.reason, requestSent: false };
-  const { records, withheld, question } = prep;
+  const { records, withheld, question, discoverableMetrics } = prep;
   let messages;
   try {
     messages = prepareMessages(question, records, runtime.analysis, runtime.promptSubject ?? DEFAULT_PROMPT_SUBJECT);
@@ -155,7 +155,7 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
   if (outcome.truncated === true) return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
   if (typeof outcome.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
 
-  const v = validateAuthorizedOutput(outcome.content, records, withheld, runtime.analysis);
+  const v = validateAuthorizedOutput(outcome.content, records, withheld, runtime.analysis, { discoverable: discoverableMetrics });
   if (!v.ok) {
     console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
     return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };

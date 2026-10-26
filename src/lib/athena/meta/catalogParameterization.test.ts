@@ -70,7 +70,8 @@ describe("semantic guards read the supplied catalog", () => {
   it("domain: a metric in an unauthorized domain, by metric alias or domain alias, is rejected; an unavailable one is told apart", () => {
     expect(check("Refund volume rose.")).toEqual(["domain"]);
     expect(check("Billing performance weakened.")).toEqual(["domain"]);
-    expect(checkSemantics("Refunds rose.", "interpretation", { ...scope, departments: new Set(["Support", "Billing"]) }).map((i) => i.code)).toEqual(["unavailable"]);
+    // A metric the access-policy layer explicitly lets the role discover, with no data, is "unavailable" (discoverability is metric-level; a department set no longer decides it).
+    expect(checkSemantics("Refunds rose.", "interpretation", semanticScope(records, facts, SUPPORT_CATALOG, { discoverable: ["refunds"] })).map((i) => i.code)).toEqual(["unavailable"]);
   });
 });
 

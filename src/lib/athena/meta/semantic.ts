@@ -385,7 +385,7 @@ export interface SemanticScope {
   departments: ReadonlySet<string>;
   /** The business vocabulary the text is read against. */
   catalog: Catalog;
-  /** When true, ANY mention of a non-discoverable metric or department is rejected. When false (the legacy default), a neutral mention of a metric in a department
+  /** When anything but `undefined` or `false` (see `isStrictMentions`), ANY mention of a non-discoverable metric or department is rejected. When `false` or absent (the legacy default), a neutral mention of a metric in a department
    * the role has no access to at all stays allowed (gaps, hand-offs), but a metric in a department the role does access, which it may not discover, is always rejected. */
   strictMentions?: boolean;
 }
@@ -394,13 +394,16 @@ export interface SemanticScopeOptions {
   discoverable?: Iterable<string> | undefined;
   strictMentions?: boolean | undefined;
 }
+/** Strict mention enforcement is the DEFAULT-DENY side of the switch: only `undefined` (not configured) and exactly `false` (explicitly legacy) leave it off. Any other value
+ * (`true`, the string "true", "false", 0, 1, null, an object, ...) is treated as strict, so a malformed or unexpected setting can never silently relax enforcement. */
+export const isStrictMentions = (v: unknown): boolean => !(v === undefined || v === false);
 export function semanticScope(authorized: readonly EvidenceLike[], facts: readonly VerifiedFact[], catalog: Catalog, opts: SemanticScopeOptions = {}): SemanticScope {
   assertCatalog(catalog);
   void authorized; // record membership grants nothing by itself: authorization to discover a metric is not inferred from which department's records happen to be present
   const known = new Set(catalog.metrics.map((m) => m.key));
   const discoverable = new Set<string>([...facts.map((f) => f.metric), ...[...(opts.discoverable ?? [])].filter((k) => known.has(k))].filter((k) => known.has(k)));
   const owner = departmentByMetric(catalog) as Record<string, string>;
-  return { facts, discoverable, departments: new Set([...discoverable].map((k) => owner[k]!)), catalog, strictMentions: opts.strictMentions === true };
+  return { facts, discoverable, departments: new Set([...discoverable].map((k) => owner[k]!)), catalog, strictMentions: isStrictMentions(opts.strictMentions) };
 }
 /** `domain`: outside the role's discoverable scope (a hidden metric or department; the SAME code and wording whether the metric is in another department or the role's own).
  * `unavailable`: a metric the policy lets the role discover, with no verified data in this scenario. Messages never name unauthorized things or echo model text. */
@@ -424,6 +427,7 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
   const hidden = (e: { kind: string; key: string }) => (e.kind === "metric" ? !discoverable.has(e.key) : !departments.has(e.key));
   // A hidden metric inside a department the role DOES have access to is never mentionable (that department is not "elsewhere"); a hidden metric or department in a
   // department the role has no access to at all may be mentioned neutrally unless the scope is strict.
+  const strict = !(scope.discoverable instanceof Set) || isStrictMentions(scope.strictMentions); // no usable discoverable set: nothing is mentionable either
   const sameDepartment = (e: { kind: string; key: string }) => e.kind === "metric" && departments.has(owner[e.key]!);
   const claimed = new Set<string>();
   for (const claim of directionalClaims(text, lane, scope.catalog)) {
@@ -440,7 +444,7 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
   }
   for (const e of mentionedEntities(text, scope.catalog)) {
     if (claimed.has(`${e.kind}:${e.key}`) || !hidden(e)) continue;
-    if (scope.strictMentions === true || sameDepartment(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
+    if (strict || sameDepartment(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
   }
   return issues;
 }

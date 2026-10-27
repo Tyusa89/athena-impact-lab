@@ -98,3 +98,29 @@ them, and no request field can select, disable or weaken them: the profile is fi
 - It does not prove truthfulness or causality, and is not full semantic evidence verification.
 - Causal wording ("because", "due to", "driven by") is a separate gap (G2) and is not addressed here.
 - The missing-evidence lane has no references and is unchanged.
+
+## 4e. Strict causal-language policy (G2, strict profile only, inactive)
+
+**The gap.** The legacy detector `hasCausalClaim` (`meta/analysis.ts`) recognises only "proves/proven/caused/is the cause/definitively/confirms that" and the bare word "cause(s)". It did not recognise "because", "due to", "driven by", "led to", "resulted in", "the reason", "responsible for", "explains why", "attributable to" or "contributed to", and in recommendations and gaps the cue words "root", "likely", "possible" and "underlying" excused an asserted cause ("The root cause is weak lead quality."). It also rejected a *denied* cause in an interpretation ("The root cause is unknown.").
+
+**Observed correlation is not established causation.** Athena's facts are observed changes (prior, current, change, direction). They say that a metric moved, never why. Interpretations are `verified: false` by schema, and a correct fact citation (H2.4b) shows only that the named metrics' facts were cited. A causal sentence with perfect citations is therefore still an unverified claim, so an affirmative one is rejected rather than presented.
+
+**Policy** (`meta/causalPolicy.ts`, used instead of `hasCausalClaim` only when the server-side `ValidateProfile.strictCausal === true`; `validateStrictOutput` is the only setter):
+- *Tier 1, proof and definitive-cause language* (proves, proof, definitive(ly), confirms that, cause(s)/caused, the cause, root cause, is why): a hedge does **not** excuse it ("The likely cause is weak lead quality." is rejected). Excused only by denial ("The root cause is unknown."), a real question, or an investigative imperative that asserts nothing.
+- *Tier 2, causal relationships* (because (of), due to, driven by, led to, resulted in, the reason, responsible for, explains why, attributable to, contributed to, stems from, as a result of, influenced): additionally excused by a hedge or conditional in the **same clause** ("Lower conversion may have contributed to the revenue decline.").
+- A hedge, denial or question in another clause or sentence does not excuse an assertion ("Revenue may fall, and it declined because of churn." is rejected).
+- *Investigative imperatives* (a sentence beginning investigate, identify, determine, review, assess, ...) are accepted in recommendations and gaps only, and never when the rest of the sentence states a conclusion ("Investigate the cause, which is weak lead quality." is rejected).
+- *Question scope.* A question excuses only the interrogative clause it is asked in (a clause that starts like a question, and is the first clause or follows a comma, "and", "but" or "or"). A declarative clause attached to it ("..., given that marketing caused the decline", "..., which was caused by X", "..., so marketing caused it") is judged on its own, as is a later sentence. An investigative imperative needs its "whether/if/why" in the same clause as the causal verb and cannot carry a copula before the term, so an appended or inverted conclusion ("Investigate delays, which is the cause of the drop.") is rejected.
+- Correlation wording ("correlated with", "associated with", "moved in the same direction") is not causal and is untouched.
+- The category stays `causal`; the public rejection is unchanged and no diagnostic category was added.
+
+**Accepted, still unverified.** A qualified hypothesis ("may have contributed to") is accepted as an interpretation. It stays `verified: false`, its `supporting_ids` are still derived from the cited facts alone, and it is not evidence that the cause is real.
+
+**Legacy isolation.** `hasCausalClaim` is unchanged; every other path, including the legacy runtime and the goldens, still uses it. A parity test pins that every sample the legacy detector rejects is still rejected by the strict policy and every legacy-allowed investigative recommendation is still allowed. Intentional differences: a *denied* cause is now accepted, and cue words ("root", "likely", "possible") no longer excuse an asserted cause in a recommendation or gap.
+
+**Known limits.** This is wording and clause matching, not semantic understanding.
+- False negatives: implicit or verb-based causality passes ("hurt", "triggered", "as a consequence of", "following", "on account of", ", reflecting"). A model can phrase around the list.
+- False positives (fail closed): "Revenue is the reason we are reviewing the plan.", "Revenue declined because of seasonality is a hypothesis to test.", "Please attach proof of delivery.", "Possible causes include delays." Tier 1 words are rejected even when hedged.
+- A same-clause hedge makes a hypothesis acceptable, not true, and a hedged sentence can still be misleading. The UI must keep labelling interpretations as unverified.
+- Unusual negations are rejected rather than accepted.
+- Strict execution remains inactive: no live route calls `validateStrictOutput`.

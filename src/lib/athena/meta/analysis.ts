@@ -9,6 +9,7 @@ import type { AnalysisContext } from "../core/facts";
 import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./grounding";
 import { LIMITS } from "./limits";
 import { renderFindings, type VerifiedFinding } from "./render";
+import { strictCausalClaim } from "./causalPolicy";
 import { refsConsistent } from "./refConsistency";
 import { checkSemantics, semanticScope, type SemanticScopeOptions } from "./semantic";
 import { UNSAFE_MESSAGE, unsafeTextKinds } from "./textSafety";
@@ -107,8 +108,8 @@ function isLegacyShape(json: unknown): boolean {
  */
 /** Validation profile. The defaults are the LEGACY behaviour (pinned by the goldens). The strict profile (`meta/strictValidation.ts`) turns both off: the model was given no record
  * identifiers, so none may appear, and any record id or source label, authorized or not, in model text is a leak. */
-/** `refConsistency` (H2.4b): when exactly `true`, cited facts must be consistent with the metrics and departments the text names. Server-side only; legacy leaves it unset. */
-export interface ValidateProfile { exemptRecordIds?: boolean; leakScope?: "withheld" | "all"; refConsistency?: boolean }
+/** `strictCausal` (G2): when exactly `true`, `strictCausalClaim` (meta/causalPolicy.ts) replaces `hasCausalClaim`. `refConsistency` (H2.4b): when exactly `true`, cited facts must be consistent with the metrics and departments the text names. Server-side only; legacy leaves it unset. */
+export interface ValidateProfile { exemptRecordIds?: boolean; leakScope?: "withheld" | "all"; refConsistency?: boolean; strictCausal?: boolean }
 export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}, profile: ValidateProfile = {}): ValidationResult {
   assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
@@ -138,7 +139,7 @@ export function validateOutput(raw: string, authorized: readonly EvidenceLike[],
   ];
   // Links, markup, code and commands are never plain business prose: reject (category and location only; the text is never echoed).
   for (const l of lanes) if (unsafeTextKinds(l.text).length) issues.push({ code: "unsafe", message: UNSAFE_MESSAGE(l.where) });
-  for (const l of lanes) if (hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
+  for (const l of lanes) if (profile.strictCausal === true ? strictCausalClaim(l.text, l.lane) : hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
   const recordIds = profile.exemptRecordIds === false ? [] : allRecords.map((r) => r.id); // legacy: record ids are exempt from the numeral rule
   for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds, ctx.periods)) issues.push({ code: "numeral", message });
   // Semantic guards: directional contradictions, magnitude expressions, unauthorized or unavailable domains. Reject, never rewrite.

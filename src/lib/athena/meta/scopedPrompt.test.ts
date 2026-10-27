@@ -276,7 +276,8 @@ describe("legacy default is unchanged and the scoped profile cannot be selected 
   it("no production module imports the scoped profile (it is not activated)", () => {
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
     const importers = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && f !== "src/lib/athena/meta/scopedPrompt.ts" && /scopedPrompt/.test(readFileSync(f, "utf8")));
-    expect(importers).toEqual([]);
+    // H2.2: the opt-in strict runtime is the ONE composer of the scoped prompt, and nothing live imports the strict runtime (pinned in strictRuntime.test.ts).
+    expect(importers).toEqual(["src/lib/athena/meta/strictRuntime.ts"]);
   });
   it("the EngineRuntime has no profile switch and the request resolvers read no profile field", () => {
     const rt = readFileSync("src/lib/athena/meta/runtime.ts", "utf8"), pa = readFileSync("src/lib/athena/prototypeAdapter.ts", "utf8"), wb = readFileSync("src/lib/athena/workbench/workbench.server.ts", "utf8");

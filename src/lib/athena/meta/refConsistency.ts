@@ -3,11 +3,13 @@
 //
 // What it establishes is MENTION-LEVEL consistency between a sentence and the facts it cites. It is NOT semantic proof: a cited fact that passes this check has not been shown to
 // support the claim, and nothing here checks that the claim is true.
-//   * COVERAGE: every metric the sentence names that has a verified fact must be cited. A sentence about two available metrics that cites one is rejected.
+//   * EXACT MATCH, when the sentence names at least one available metric: the cited fact metrics must be exactly the named available metrics. COVERAGE: every named metric that has a
+//     verified fact must be cited (a sentence about two available metrics that cites one is rejected). NO EXTRAS: a cited fact whose metric is not named is rejected, so unrelated
+//     records cannot ride along as supporting ids.
 //   * A sentence that names no available metric is generic (an unverified hypothesis, a recommendation, department vocabulary such as "review the sales strategy") and may cite any
 //     authorized fact. Department words are deliberately NOT used to constrain citations: that would reject the generic business language H2.3 accepts, and a department match would
 //     only look like verification.
-// Citations are never rewritten, added or removed, and `supporting_ids` stay derived from the cited facts alone. Ordinary words that equal a catalog alias ("lead the review") count as
+// Citations are never rewritten, added or removed (a violation rejects the output), and `supporting_ids` stay derived from the cited facts alone. Ordinary words that equal a catalog alias ("lead the review") count as
 // mentions and fail closed.
 import type { Catalog } from "../core/catalog";
 import type { VerifiedFact } from "./grounding";
@@ -28,5 +30,10 @@ export function refsConsistent(
   const named = new Set(
     entities.filter((e) => e.kind === "metric" && haveFact.has(e.key)).map((e) => e.key),
   );
-  return [...named].every((m) => cited.some((f) => f.metric === m));
+  if (!named.size) return true;
+  // Exact match: every named metric is cited (coverage) and every cited fact is a named metric (no unrelated extras).
+  return (
+    [...named].every((m) => cited.some((f) => f.metric === m)) &&
+    cited.every((f) => named.has(f.metric))
+  );
 }

@@ -124,15 +124,61 @@ describe("4. two metrics, one cited", () => {
       diag(strict(EXEC, "r", "Review the lead source mix and the conversion step.", ["F-leads"])),
     ).toEqual(["relevance"]);
   });
-  it("an extra cited fact beyond the named ones is allowed and nothing is added or removed", () => {
-    const v = strict(EXEC, "i", "Lead volume increased.", ["F-leads", "F-revenue"]);
+  it("an extra unrelated citation beside a named metric's fact is rejected, so unrelated records cannot become supporting ids", () => {
+    expect(diag(strict(EXEC, "i", "Lead volume increased.", ["F-leads", "F-revenue"]))).toEqual([
+      "relevance",
+    ]);
+    expect(diag(strict(EXEC, "r", "Review lead volume.", ["F-revenue", "F-leads"]))).toEqual([
+      "relevance",
+    ]);
+    expect(
+      diag(
+        strict(EXEC, "i", "Lead volume increased while conversion declined.", [
+          "F-leads",
+          "F-conversion_rate",
+          "F-revenue",
+        ]),
+      ),
+    ).toEqual(["relevance"]);
+  });
+  it("a context fact is allowed only when the sentence names its metric, and then it must be cited", () => {
+    expect(
+      ok(
+        strict(EXEC, "i", "Lead volume rose, which may relate to the revenue trend.", [
+          "F-leads",
+          "F-revenue",
+        ]),
+      ),
+    ).toBe(true);
+    expect(
+      diag(
+        strict(EXEC, "i", "Lead volume rose, which may relate to the revenue trend.", ["F-leads"]),
+      ),
+    ).toEqual(["relevance"]);
+  });
+  it("repeated citations of the same named fact are still exact (supporting ids are derived once)", () => {
+    const v = strict(EXEC, "i", "Lead volume increased.", ["F-leads", "F-leads"]);
     expect(ok(v)).toBe(true);
-    if (v.ok) expect(v.output.interpretations[0]!.refs).toEqual(["F-leads", "F-revenue"]);
+    if (v.ok) {
+      expect(v.output.interpretations[0]!.refs).toEqual(["F-leads"]);
+      expect(v.output.interpretations[0]!.supporting_ids).toEqual([
+        "VH-MKT-001-Q2",
+        "VH-MKT-001-Q3",
+      ]);
+    }
+  });
+  it("a rejected extra never leaks into the response and nothing is rewritten", () => {
+    const v = strict(EXEC, "i", "Lead volume increased.", ["F-leads", "F-revenue"]);
+    expect(v.ok).toBe(false);
+    expect(JSON.stringify(v)).not.toMatch(/revenue|F-|VH-/i);
   });
 });
 
 describe("5-7. generic statements and multi-metric recommendations", () => {
-  it("accepts a generic unverified hypothesis citing any authorized fact", () => {
+  it("accepts a generic unverified hypothesis citing any authorized facts, several included", () => {
+    expect(
+      ok(strict(EXEC, "i", "The decline may reflect seasonal demand.", ["F-revenue", "F-leads"])),
+    ).toBe(true);
     const v = strict(EXEC, "i", "The decline may reflect seasonal demand.", ["F-revenue"]);
     expect(ok(v)).toBe(true);
     if (v.ok) expect(v.output.interpretations[0]!.verified).toBe(false);

@@ -171,3 +171,79 @@ describe("authorization and the demo policy are untouched by the guard changes",
     expect(Object.keys(p)).toEqual(["evidenceScope"]);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+// H1.1 correction: an unauthorized reference gets ONE fixed message whether it is a directional claim or a neutral mention, in the role's own department or another.
+describe("one observable response for every rejected unauthorized reference", () => {
+  const GRANT = ["leads"]; // the role may discover only lead volume (Marketing); everything else is hidden
+  const HIDDEN_SAME = ["Lead quality", "Customer acquisition cost"]; // Marketing: the role's own department
+  const HIDDEN_OTHER = ["Recognized revenue", "Sales conversion rate", "Closed deals", "Backorder rate", "Avg. fulfillment time"]; // other departments
+  const HIDDEN_DEPT = ["Finance", "Sales", "Operations"];
+  const claim = (t: string) => `${t} fell.`;
+  const mention = (t: string) => `${t} may be worth a look.`;
+  /** The whole observable result of the semantic gate for one text: codes and messages, serialized exactly as a client would see them. */
+  const observe = (text: string, lane: "interpretation" | "recommendation" | "gap", s: SemanticScope) => JSON.stringify(checkSemantics(text, lane, s, lane === "interpretation" ? "interpretation 1" : lane === "recommendation" ? "proposed action 1" : "gap 1"));
+
+  it("directional claims and neutral mentions, same-department and cross-department, metrics and departments, are indistinguishable in strict mode", () => {
+    const strict = scopeWith(true, GRANT);
+    for (const lane of ["interpretation", "recommendation", "gap"] as const) {
+      const seen = new Set<string>();
+      for (const t of [...HIDDEN_SAME, ...HIDDEN_OTHER, ...HIDDEN_DEPT]) for (const make of [claim, mention]) seen.add(observe(make(t), lane, strict));
+      expect(seen.size, lane).toBe(1);
+      const [only] = [...seen];
+      expect(JSON.parse(only!)).toEqual([{ code: "domain", message: expect.stringMatching(/^Semantic guard \(domain\): .* outside this role's authorized scope$/) }]);
+    }
+  });
+  it("in the legacy mode, every rejected reference (same-department claim and mention, cross-department claim) gets that same single message", () => {
+    const legacy = scopeWith(false, GRANT);
+    for (const lane of ["interpretation", "gap"] as const) {
+      const seen = new Set<string>();
+      for (const t of HIDDEN_SAME) for (const make of [claim, mention]) seen.add(observe(make(t), lane, legacy));
+      for (const t of [...HIDDEN_OTHER, ...HIDDEN_DEPT]) seen.add(observe(claim(t), lane, legacy));
+      expect(seen.size, lane).toBe(1);
+    }
+    expect(observe(mention("Recognized revenue"), "gap", legacy)).toBe("[]"); // the legacy allowance (documented): a cross-department neutral mention is accepted, not rejected differently
+  });
+  it("legacy and strict produce byte-identical rejections for the same text", () => {
+    const legacy = scopeWith(false, GRANT), strict = scopeWith(true, GRANT);
+    for (const t of [...HIDDEN_SAME]) for (const make of [claim, mention]) expect(observe(make(t), "gap", legacy)).toBe(observe(make(t), "gap", strict));
+    for (const t of [...HIDDEN_OTHER, ...HIDDEN_DEPT]) expect(observe(claim(t), "gap", legacy)).toBe(observe(claim(t), "gap", strict));
+  });
+  it("the number and order of hidden references in a text do not change the response", () => {
+    const strict = scopeWith(true, GRANT);
+    const one = observe(claim("Lead quality"), "interpretation", strict);
+    expect(observe("Lead quality and Customer acquisition cost and Recognized revenue and Finance fell.", "interpretation", strict)).toBe(one);
+    expect(observe("Recognized revenue may be worth a look next to Lead quality.", "interpretation", strict)).toBe(one);
+    expect(observe("Sales conversion rate rose while Finance weakened.", "interpretation", strict)).toBe(one);
+  });
+  it("the message names no metric, label, key, department or word that says whether the reference was a claim", () => {
+    const strict = scopeWith(true, GRANT);
+    for (const t of [...HIDDEN_SAME, ...HIDDEN_OTHER, ...HIDDEN_DEPT]) for (const make of [claim, mention]) {
+      const out = observe(make(t), "gap", strict);
+      expect(out.toLowerCase()).not.toContain(t.toLowerCase());
+      for (const k of ["mql_rate", "cac", "revenue", "conversion_rate", "closed_deals", "fulfillment_days", "backorder_rate"]) expect(out).not.toContain(k);
+      expect(out).not.toMatch(/mention|neutral|refers to/i);
+    }
+  });
+  it("end to end, the whole rejected result (errors and categories) is identical for a claim and a mention", () => {
+    const run = (text: string, strictMentions: boolean) => {
+      const body = JSON.stringify({ interpretations: [], missing_evidence: [text], recommendations: [] });
+      return JSON.stringify(validateAuthorizedOutput(body, authorized.authorized, authorized.withheld, PROTOTYPE_RUNTIME.analysis, { discoverable: ["revenue"], strictMentions }));
+    };
+    const outs = new Set<string>();
+    for (const t of ["Lead quality", "Customer acquisition cost", "Lead volume", "Backorder rate", "Marketing"]) for (const make of [claim, mention]) outs.add(run(make(t), true));
+    expect(outs.size).toBe(1);
+    const [only] = [...outs];
+    expect(JSON.parse(only!)).toMatchObject({ ok: false, categories: ["domain"] });
+  });
+  it("legitimate direction, unavailable and magnitude behavior is unchanged", () => {
+    const a = authorizeDemo({ scenarioId: "quality-only", roleId: "exec" });
+    const f = buildAuthorizedFacts(a.authorized, PROTOTYPE_RUNTIME.analysis);
+    const s = semanticScope(a.authorized, f, PROTOTYPE_CATALOG, { discoverable: PROTOTYPE_CATALOG.metrics.map((m) => m.key), strictMentions: true });
+    expect(checkSemantics("Lead volume fell.", "interpretation", s, "interpretation 1").map((i) => i.code)).toEqual(["direction"]); // leads rose in the data
+    expect(checkSemantics("Lead volume fell.", "interpretation", s, "interpretation 1")[0]!.message).toMatch(/^Semantic guard \(direction\): interpretation 1 says Marketing leads is down, but the verified finding is up$/);
+    expect(checkSemantics("Customer acquisition cost rose.", "interpretation", s, "interpretation 1")).toEqual([{ code: "unavailable", message: "Semantic guard (unavailable data): interpretation 1 makes a directional claim about a metric for which no verified data is available in this scenario" }]);
+    expect(checkSemantics("Lead volume doubled.", "interpretation", s, "interpretation 1").map((i) => i.code)).toEqual(["magnitude"]);
+    expect(checkSemantics("Lead volume rose.", "interpretation", s, "interpretation 1")).toEqual([]);
+  });
+});

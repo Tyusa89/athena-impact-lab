@@ -40,6 +40,11 @@ Output schema literals (`verified:false`, `requires_human_approval:true`, `.stri
   * "evil dot com" (a label before `dot`) is a link; "the dot com era" (an article or preposition before `dot`) is not. `[.]`, `(dot)` and `[dot]` stay links unconditionally.
 * Measured on the new test corpora: ordinary prose flagged 30 of 49 (H1) to 0 of 49; unsafe probes flagged 117 of 124 (H1) to 124 of 124, none lost.
 
+* **One message for every unauthorized reference.** A directional claim and a neutral mention, a hidden metric in the role's own department and one in another, a metric and a
+  department all produce the identical `{code: "domain", message}` (the legacy wording pinned by `golden/combos.json`, kept verbatim, so a mention is described with the same words
+  as a claim). Count and order of hidden references in a text do not change the response. `direction`, `magnitude` and `unavailable` are unchanged: they concern metrics the role
+  may discover, and are the only messages that can name an authorized metric.
+
 ## 5. Remaining limitations
 * **Outcome oracle.** Accept versus reject is still observable. If a caller can get a term into the model's text (for example through the question) they can learn that a
   recognised-but-hidden term is rejected while an unrecognised word is not. The messages reveal nothing and the model is told to use only VERIFIED_FACTS; closing this

@@ -409,9 +409,10 @@ export function semanticScope(authorized: readonly EvidenceLike[], facts: readon
  * `unavailable`: a metric the policy lets the role discover, with no verified data in this scenario. Messages never name unauthorized things or echo model text. */
 export interface SemanticIssue { code: "magnitude" | "direction" | "domain" | "unavailable"; message: string }
 
-/** One fixed wording for every scope violation, so the response cannot tell a hidden metric of the role's own department from one elsewhere, or a claim from a mention. */
-const SCOPE_MESSAGE = (where: string) => `Semantic guard (domain): ${where} refers to a metric or department outside this role's authorized scope`;
-const DOMAIN_MESSAGE = (where: string) => `Semantic guard (domain): ${where} makes a directional claim about a metric or department outside this role's authorized scope`;
+/** ONE fixed message for every scope violation: a directional claim or a neutral mention, a hidden metric in the role's own department or in another, a metric or a department.
+ * The wording is the legacy text that `golden/combos.json` pins, kept verbatim so no golden changes; it is used for mentions too, which means a neutral mention is described
+ * with the same words as a claim. That is deliberate: the response must not reveal what kind of reference was rejected, which metric or department it was, or where it lives. */
+const SCOPE_MESSAGE = (where: string) => `Semantic guard (domain): ${where} makes a directional claim about a metric or department outside this role's authorized scope`;
 
 /** All semantic-guard issues for one text. Empty when the text passes. `where` is a safe locator such as "interpretation 2". */
 export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, where = "text"): SemanticIssue[] {
@@ -434,7 +435,7 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
     for (const e of claim.entities) {
       claimed.add(`${e.kind}:${e.key}`);
       const claimText = `${claim.negated ? "not " : ""}${claim.dir}`;
-      if (hidden(e)) push({ code: "domain", message: DOMAIN_MESSAGE(where) });
+      if (hidden(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
       else if (e.kind === "metric") {
         const f = byMetric.get(e.key);
         if (!f) push({ code: "unavailable", message: `Semantic guard (unavailable data): ${where} makes a directional claim about a metric for which no verified data is available in this scenario` });

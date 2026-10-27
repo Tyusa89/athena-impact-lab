@@ -155,12 +155,13 @@ describe("cross-department restrictions are preserved", () => {
 });
 
 describe("side channels", () => {
-  it("the two scope messages are fixed wording that names nothing", () => {
+  it("the scope message is fixed wording that names nothing, and is the same for a claim and a mention (H1.1)", () => {
     const s = semanticScope([], [], PROTOTYPE_CATALOG);
-    expect(checkSemantics("Lead quality fell.", "interpretation", s, "interpretation 1")).toEqual([{ code: "domain", message: "Semantic guard (domain): interpretation 1 makes a directional claim about a metric or department outside this role's authorized scope" }]);
-    expect(checkSemantics("Lead quality may be worth a look.", "gap", { ...s, strictMentions: true }, "gap 1")).toEqual([{ code: "domain", message: "Semantic guard (domain): gap 1 refers to a metric or department outside this role's authorized scope" }]);
+    const want = [{ code: "domain", message: "Semantic guard (domain): interpretation 1 makes a directional claim about a metric or department outside this role's authorized scope" }];
+    expect(checkSemantics("Lead quality fell.", "interpretation", s, "interpretation 1")).toEqual(want);
+    expect(checkSemantics("Lead quality may be worth a look.", "interpretation", { ...s, strictMentions: true }, "interpretation 1")).toEqual(want);
   });
-  it("one fixed message for directional claims and one for mentions; neither depends on which hidden metric", async () => {
+  it("one fixed message for directional claims and for mentions; neither depends on which hidden metric", async () => {
     const claims = new Set<string>(), mentions = new Set<string>();
     for (const m of PROTOTYPE_CATALOG.metrics.filter((x) => x.key !== "leads")) {
       const c = await errorsOf(`${label(m.key)} fell.`, LEADS_ONLY);

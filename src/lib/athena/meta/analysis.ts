@@ -104,7 +104,10 @@ function isLegacyShape(json: unknown): boolean {
  * Strict output gate: legacy-shape rejection, schema, fact references, cross-workspace leaks, causal claims, numeral policy and semantic guards.
  * Client-visible errors never contain record ids, source labels, fact ids, unauthorized metric/department names or model text.
  */
-export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}): ValidationResult {
+/** Validation profile. The defaults are the LEGACY behaviour (pinned by the goldens). The strict profile (`meta/strictValidation.ts`) turns both off: the model was given no record
+ * identifiers, so none may appear, and any record id or source label, authorized or not, in model text is a leak. */
+export interface ValidateProfile { exemptRecordIds?: boolean; leakScope?: "withheld" | "all" }
+export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}, profile: ValidateProfile = {}): ValidationResult {
   assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
   try { json = JSON.parse(raw); } catch { return fail({ code: "json", message: "Output is not valid JSON" }); }
@@ -118,7 +121,7 @@ export function validateOutput(raw: string, authorized: readonly EvidenceLike[],
   // A record is authorized only if the same tenant's record with that id is: another tenant's record that happens to reuse an id is still hidden.
   const recordKey = (r: EvidenceLike) => `${r.tenantId ?? ""}\u0000${r.id}`;
   const authorizedKeys = new Set(authorized.map(recordKey));
-  const hidden = allRecords.filter((r) => !authorizedKeys.has(recordKey(r)));
+  const hidden = profile.leakScope === "all" ? [...allRecords] : allRecords.filter((r) => !authorizedKeys.has(recordKey(r)));
   const texts = [...out.interpretations.map((x) => x.text), ...out.missing_evidence, ...out.recommendations.map((x) => x.text)];
   // A leak is reported on its own, so nothing else (which might quote model text) is returned alongside it.
   const textKeys = texts.map(leakKey);
@@ -134,7 +137,7 @@ export function validateOutput(raw: string, authorized: readonly EvidenceLike[],
   // Links, markup, code and commands are never plain business prose: reject (category and location only; the text is never echoed).
   for (const l of lanes) if (unsafeTextKinds(l.text).length) issues.push({ code: "unsafe", message: UNSAFE_MESSAGE(l.where) });
   for (const l of lanes) if (hasCausalClaim(l.text, l.lane !== "interpretation")) { issues.push({ code: "causal", message: `Causal-proof language rejected in ${l.where}` }); break; }
-  const recordIds = allRecords.map((r) => r.id);
+  const recordIds = profile.exemptRecordIds === false ? [] : allRecords.map((r) => r.id); // legacy: record ids are exempt from the numeral rule
   for (const l of lanes) for (const message of verifyNoNumerals(l.text, recordIds, ctx.periods)) issues.push({ code: "numeral", message });
   // Semantic guards: directional contradictions, magnitude expressions, unauthorized or unavailable domains. Reject, never rewrite.
   // Scope is metric-level: metrics with verified data plus what the access-policy layer explicitly granted. Not inferred from departments.
@@ -155,7 +158,7 @@ export function prepareMessages<E extends Evidence>(question: string, authorized
   return buildMessages(question, authorized, ctx, subject);
 }
 /** Output validation for the live path. `withheld` is the server-side set of records the caller may not see (their identifiers must not appear in model text). */
-export function validateAuthorizedOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}): ValidationResult {
+export function validateAuthorizedOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}, profile: ValidateProfile = {}): ValidationResult {
   assertAuthorized(authorized);
-  return validateOutput(raw, authorized, [...authorized, ...withheld], ctx, scopeOpts);
+  return validateOutput(raw, authorized, [...authorized, ...withheld], ctx, scopeOpts, profile);
 }

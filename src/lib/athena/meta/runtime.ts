@@ -120,6 +120,21 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
   const est = estimateTokens(JSON.stringify(messages));
   if (est > MAX_INPUT_TOKENS) return { state: "blocked", reason: `Estimated input ${est} tokens exceeds budget ${MAX_INPUT_TOKENS}.`, requestSent: false };
 
+  const call = await callModel(provider, label, messages, env, fetchImpl);
+  if (!call.ok) return call.result;
+  const { content, usage } = call;
+
+  const v = validateAuthorizedOutput(content, records, withheld, runtime.analysis, { discoverable: discoverableMetrics });
+  if (!v.ok) {
+    console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
+    return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };
+  }
+  return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
+}
+
+/** The ONE place a model is called. Exactly one request, one engine-enforced deadline, nothing retried, nothing a provider returns trusted beyond text, token counts and a truncation
+ * flag. Shared by `runAnalysis` and by the separate opt-in execution path in `meta/strictRuntime.ts`. Returns the reply text, or the fixed engine result for a provider-level failure. */
+export async function callModel(provider: ModelProvider, label: string, messages: readonly { role: "system" | "user"; content: string }[], env: ProviderEnv, fetchImpl: typeof fetch): Promise<{ ok: true; content: string; usage: Usage } | { ok: false; result: MetaResult }> {
   // One deadline covers the whole provider call (request and full response). It is enforced HERE, not only via the abort signal, so a
   // provider that stalls or ignores the signal still ends at REQUEST_TIMEOUT_MS. Exactly one call; never retried, whatever it returns.
   // The provider gets only the finished messages (built from authorized evidence), the output cap and the schema. Nothing else.
@@ -136,31 +151,27 @@ export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: t
   } catch (e) {
     const timedOut = ctrl.signal.aborted;
     if (!timedOut) console.error("Model provider error", JSON.stringify({ provider: safeId(provider), code: "thrown" })); // category only
-    return { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Provider error (not retried): ${safeThrownName(e)}`, requestSent: true };
+    return { ok: false, result: { state: "error", reason: timedOut ? `Request timed out after ${REQUEST_TIMEOUT_MS} ms (not retried).` : `Provider error (not retried): ${safeThrownName(e)}`, requestSent: true } };
   } finally { clearTimeout(timer); }
 
   // Nothing a provider returns is trusted: only well-formed text, token counts and a truncation flag are read; the rest is ignored.
-  if (typeof outcome !== "object" || outcome === null) return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
+  if (typeof outcome !== "object" || outcome === null) return { ok: false, result: { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true } };
   if (outcome.kind === "failure") {
     // The client sees fixed engine wording for a CLOSED category (plus an HTTP status or known error class name). Free text from the provider is never read.
     const f = safeFailure(outcome);
     console.error("Model provider error", JSON.stringify({ provider: safeId(provider), code: f.code, ...(f.status !== undefined ? { status: f.status } : {}) })); // safe codes and numbers only
-    return { state: "error", reason: describeFailure(f, label), requestSent: true };
+    return { ok: false, result: { state: "error", reason: describeFailure(f, label), requestSent: true } };
   }
-  if (outcome.kind !== "completion") return { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true };
+  if (outcome.kind !== "completion") return { ok: false, result: { state: "error", reason: "Provider returned an invalid response (not retried).", requestSent: true } };
   const usage = cleanUsage(outcome.usage, MAX_OUTPUT_TOKENS);
   // Redacted diagnostic log: token accounting only, never key, prompt or content.
   console.info("Meta usage", JSON.stringify(usage));
-  if ((usage.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage };
-  if (outcome.truncated === true) return { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage };
-  if (typeof outcome.content !== "string") return { state: "rejected", errors: ["Missing message content"], requestSent: true, usage };
+  if ((usage.completion_tokens ?? 0) > MAX_OUTPUT_TOKENS) return { ok: false, result: { state: "rejected", errors: ["Output token budget exceeded"], requestSent: true, usage } };
+  if (outcome.truncated === true) return { ok: false, result: { state: "rejected", errors: [`Output truncated at token cap (max_tokens=${MAX_OUTPUT_TOKENS}; reasoning tokens ${usage.reasoning_tokens ?? "not reported"})`], requestSent: true, usage } };
+  if (typeof outcome.content !== "string") return { ok: false, result: { state: "rejected", errors: ["Missing message content"], requestSent: true, usage } };
 
-  const v = validateAuthorizedOutput(outcome.content, records, withheld, runtime.analysis, { discoverable: discoverableMetrics });
-  if (!v.ok) {
-    console.info("Meta validation rejected", JSON.stringify({ categories: v.categories })); // safe codes only: never text, ids or labels
-    return { state: "rejected", errors: v.errors, categories: v.categories, requestSent: true, usage };
-  }
-  return { state: "ok", findings: v.findings, output: v.output, requestSent: true, usage, authorizedIds: records.map((r) => r.id) };
+
+  return { ok: true, content: outcome.content, usage };
 }
 
 export type ImpactResult = { state: "ok"; impact: ImpactMap; authorizedIds: string[]; /** The authorized evidence the map was built from. SERVER-SIDE ONLY: an application projects what it presents from it; it is never serialized as is. */ records: AuthorizedEvidence } | { state: "blocked"; reason: string };

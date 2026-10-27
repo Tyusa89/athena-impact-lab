@@ -56,6 +56,17 @@ no request field can select it (a test pins both). The legacy `buildMessages` st
 * **UNAVAILABLE_METRICS.** Discoverable metrics with no verified data (the policy's grant) are listed apart as `{metric, status:"no_verified_data"}`: no value, no department.
 * Requires `AuthorizedEvidence`; the grant comes from the server (`Prepared.discoverableMetrics`), never from a request.
 
+## 4c. H2.2: strict validation and uniform public rejection (opt-in; NOT active)
+`meta/strictValidation.ts` (`validateStrictOutput`) and `meta/strictRuntime.ts` (`runStrictAnalysis`) compose the scoped prompt (H2.1), one model call, and the strict gate. Nothing live imports
+them, and no request field can select, disable or weaken them: the profile is fixed in code and the only server option is a diagnostics sink.
+
+* **Strict in all three lanes.** `strictMentions: true`: any mention of a metric or department the caller may not discover is rejected, directional or neutral, in this department or another.
+* **No record identifiers anywhere.** The scoped model was shown none, so no id is numeral-exempt (`exemptRecordIds: false`) and any record id or source label, authorized or not, in model text is a leak (`leakScope: "all"`). The legacy defaults are unchanged (pinned by the goldens).
+* **One public rejection.** Every failure (JSON, schema, leak, bad reference, unsafe text, causal, numeral, magnitude, direction, scope, provider truncation or empty reply, even a validator fault) returns the
+  same bytes: `{"state":"rejected","reason":"The model output did not pass validation and was not used.","requestSent":true}`. No errors, categories or usage.
+* **Detail stays internal.** The cause is a CLOSED category code (`DIAGNOSTIC_CATEGORIES`), sent to the server log and the optional sink only; anything outside the set is `unknown`.
+* **Shared model call.** The single call, deadline, no-retry and provider-error boundary were extracted unchanged from `runAnalysis` into `callModel` and are used by both paths; the legacy path's behaviour is pinned by its existing tests and the goldens.
+
 ## 5. Remaining limitations
 * **Outcome oracle.** Accept versus reject is still observable. If a caller can get a term into the model's text (for example through the question) they can learn that a
   recognised-but-hidden term is rejected while an unrecognised word is not. The messages reveal nothing and the model is told to use only VERIFIED_FACTS; closing this
@@ -65,5 +76,6 @@ no request field can select it (a test pins both). The legacy `buildMessages` st
 * Ambiguous command words used with a flag-like or path-like next word in prose ("kill -" typed oddly) can still be flagged.
 * Both guards are bounded heuristics (alias matching; pattern matching of unsafe text). Paraphrases, look-alike characters beyond NFKC, and unusual encodings can evade them.
   React escaping remains the rendering defence.
+* H2.2: the public rejections are indistinguishable from each other, but accept versus reject is still observable. With the scoped prompt the caller can no longer steer the model to a hidden term, so the oracle has no input; it is not eliminated for text the model produces on its own. Timing of validation is not equalized. Homoglyph (look-alike character) spellings of a hidden term are not recognized.
 * H2.1 closes the question and record-id inputs for the scoped profile only; the live runtime still uses the legacy prompt until a later PR activates it. Strict mentions plumbing, uniform public rejection (the accept/reject oracle) and department-word refinement are H2.2/H2.3.
 * Prompt-side items from the Phase H audit (opaque record aliases, impact-aware prompt, spend limits, `/impact` wiring) are NOT part of H1.

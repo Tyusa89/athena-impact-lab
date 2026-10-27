@@ -39,6 +39,10 @@ const WH = /\b(?:whether|if|why|what|how|which)\b/;
 const INVESTIGATIVE =
   /^(?:(?:please|we should|you should|consider|next)\s+)?(?:investigate|identify|determine|review|assess|examine|explore|check|diagnose|analy[sz]e|audit|verify|test|evaluate|find out|look into|clarify)\b/;
 const ASSERTS_AFTER = /\b(?:is|are|was|were|because|due to|caused|led to|resulted in)\b/;
+/** Separators after which a clause can still be a question of its own ("..., or did lower conversion contribute?"); "which", "so", "while" ... open a declarative continuation. */
+const QUESTION_LEAD = new Set(["", ",", "and", "but"]);
+/** A copula in front of the term inside its own clause makes it a predicate ("..., which is the cause of the drop"). */
+const COPULA = /\b(?:is|are|was|were|be|been|being)\b/;
 const QUESTION_START =
   /^(?:did|does|do|is|are|was|were|could|can|has|have|what|why|how|which|whether)\b/;
 
@@ -68,15 +72,18 @@ function hits(clause: string): Hit[] {
   }
   return out.sort((a, b) => a.index - b.index);
 }
-function clauses(segment: string): { text: string; start: number }[] {
-  const out: { text: string; start: number }[] = [];
-  let last = 0;
+/** `lead` is the separator that opens the clause ("" for the first, "," / "and" / "but" / "which" / "so" ...). */
+function clauses(segment: string): { text: string; start: number; lead: string }[] {
+  const out: { text: string; start: number; lead: string }[] = [];
+  let last = 0,
+    lead = "";
   SOFT.lastIndex = 0;
   for (let m = SOFT.exec(segment); m; m = SOFT.exec(segment)) {
-    out.push({ text: segment.slice(last, m.index), start: last });
+    out.push({ text: segment.slice(last, m.index), start: last, lead });
     last = m.index + m[0].length;
+    lead = m[0].trim();
   }
-  out.push({ text: segment.slice(last), start: last });
+  out.push({ text: segment.slice(last), start: last, lead });
   return out;
 }
 
@@ -87,13 +94,19 @@ export function strictCausalClaim(text: string, lane: Lane): boolean {
   for (const [, body, end] of norm.matchAll(/([^.!?]+)([.!?]*)/g)) {
     const sentence = body!.trim();
     if (!sentence) continue;
-    const isQuestion = (end ?? "").includes("?") && QUESTION_START.test(sentence);
+    const questionMark = (end ?? "").includes("?");
     for (const segment of sentence.split(/[;:]/)) {
       const seg = segment.trim();
       const imperative = lane !== "interpretation" && INVESTIGATIVE.test(seg);
+      let first = true;
       for (const c of clauses(seg)) {
+        // A question excuses only the INTERROGATIVE clause it is asked in; a declarative clause attached to it ("..., given that marketing caused the decline", "..., which was caused by X") is judged on its own.
+        const clause = c.text.trim().replace(/^(?:or|and|but)\s+/, "");
+        const interrogative =
+          questionMark && QUESTION_START.test(clause) && (first || QUESTION_LEAD.has(c.lead));
+        if (clause) first = false;
         for (const h of hits(c.text)) {
-          if (isQuestion) continue;
+          if (interrogative) continue;
           const before = c.text.slice(0, h.index),
             after = c.text.slice(h.index + h.text.length);
           if (CLAUSE_CONNECTOR.test(h.text) ? NEG_DIRECT.test(before) : NEG_NEAR.test(before))
@@ -102,7 +115,8 @@ export function strictCausalClaim(text: string, lane: Lane): boolean {
           if (
             imperative &&
             !ASSERTS_AFTER.test(seg.slice(c.start + h.index + h.text.length)) &&
-            (WH.test(seg.slice(0, c.start + h.index)) || NOUN_FORM.test(h.text))
+            !COPULA.test(before) &&
+            (WH.test(before) || NOUN_FORM.test(h.text))
           )
             continue; // investigative
           if (h.tier === 2 && HEDGE.test(before)) continue; // qualified hypothesis, same clause only

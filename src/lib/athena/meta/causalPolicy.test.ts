@@ -142,6 +142,47 @@ describe("questions and investigative language", () => {
   });
 });
 
+describe("a question excuses only the clause it is asked in (question-scope hardening)", () => {
+  it("genuine questions about causality are accepted", () => {
+    for (const t of [
+      "Did lead quality contribute to the decline?",
+      "Is it true that marketing caused the revenue decline?",
+      "Did marketing cause the decline, or did lower conversion contribute?",
+      "What caused the decline?",
+      "Did marketing cause the decline, and was it driven by weak leads?",
+      "Revenue fell; did marketing cause it?",
+      "Was the decline due to churn or was weak demand responsible?",
+      "Did the decline happen because marketing caused it?",
+      "Did marketing cause the decline, or did lower conversion contribute to it?",
+    ])
+      acc(t);
+  });
+  it("an affirmative claim attached to a question is judged on its own", () => {
+    for (const t of [
+      "Did revenue decline because marketing failed, given that marketing definitely caused the decline?",
+      "Did marketing cause the decline, which was caused by weak leads?",
+      "Did revenue fall, so marketing caused it?",
+      "Did marketing fail, but marketing caused the decline?",
+      "Revenue fell because of churn; did marketing cause it?",
+      "Did marketing fail? The root cause is weak lead quality?",
+      "Why did revenue decline? Marketing caused it.",
+      "Revenue declined because of churn, didn't it?",
+      "Marketing failed, so did revenue? Marketing caused the decline?",
+      "Did marketing cause it? Yes, marketing caused it?",
+    ])
+      rej(t);
+  });
+  it("an investigative imperative cannot carry an appended or inverted causal conclusion", () => {
+    rej(
+      "Investigate whether marketing contributed to the decline, which was caused by poor lead quality.",
+      [I, R, G],
+    );
+    rej("Investigate delays, which is the cause of the drop.", [R, G]);
+    acc("Investigate whether marketing contributed to the decline.", [R, G]);
+    rej("Investigate whether revenue fell, delays caused the drop.", [R, G]); // the "whether" is in another clause
+  });
+});
+
 describe("noncausal wording is untouched", () => {
   it.each([
     "Revenue declined, while lead volume increased.",

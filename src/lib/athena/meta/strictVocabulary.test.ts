@@ -741,7 +741,7 @@ describe("public rejections stay byte-identical and nothing client-side can chan
     expect(setters).toEqual(["src/lib/athena/meta/strictValidation.ts"]);
     const live = prod.filter(
       (f) =>
-        !/meta\/strict(Runtime|Validation|Vocabulary)\.ts$|meta\/scopedPrompt\.ts$/.test(f) &&
+        !/meta\/strict(Runtime|Validation|Vocabulary)\.ts$|meta\/(scopedPrompt|refConsistency)\.ts$/.test(f) &&
         /strictRuntime|runStrictAnalysis|validateStrictOutput|strictVocabulary|generalVocabulary/.test(
           strip(readFileSync(f, "utf8")),
         ),

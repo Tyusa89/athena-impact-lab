@@ -16,7 +16,7 @@ import type { VerifiedFinding } from "./render";
 /** The only public wording for a rejected model output. */
 export const STRICT_REJECTION_REASON = "The model output did not pass validation and was not used.";
 /** The closed set of server-side diagnostic categories. Anything else is reported as "unknown". */
-export const DIAGNOSTIC_CATEGORIES = ["json", "legacy", "schema", "leak", "ref", "unsafe", "causal", "numeral", "magnitude", "direction", "domain", "unavailable", "provider", "unknown"] as const;
+export const DIAGNOSTIC_CATEGORIES = ["json", "legacy", "schema", "leak", "ref", "relevance", "unsafe", "causal", "numeral", "magnitude", "direction", "domain", "unavailable", "provider", "unknown"] as const;
 export type DiagnosticCategory = (typeof DIAGNOSTIC_CATEGORIES)[number];
 const CLOSED = new Set<string>(DIAGNOSTIC_CATEGORIES);
 export const toDiagnostics = (cats: readonly unknown[]): DiagnosticCategory[] => [...new Set(cats.map((c) => (typeof c === "string" && CLOSED.has(c) ? (c as DiagnosticCategory) : "unknown")))];
@@ -35,6 +35,6 @@ export type StrictValidation =
  * option to relax strictness: the profile is fixed here.
  */
 export function validateStrictOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, discoverableMetrics: readonly string[]): StrictValidation {
-  const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true, generalVocabulary: true }, { exemptRecordIds: false, leakScope: "all" });
+  const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true, generalVocabulary: true }, { exemptRecordIds: false, leakScope: "all", refConsistency: true });
   return v.ok ? { ok: true, output: v.output, findings: v.findings } : { ok: false, diagnostics: toDiagnostics(v.categories) };
 }

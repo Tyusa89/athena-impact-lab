@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 // The generic engine modules must not depend on the prototype, a concrete provider, or the facades that default to either.
 // (A guard rail against mistakes in review, not a security boundary.)
-const NEUTRAL = ["impact", "analysis", "grounding", "render", "semantic", "runtime", "question", "provider", "providerBoundary", "limits", "outputSchema", "textSafety", "scopedPrompt", "strictValidation", "strictRuntime", "strictVocabulary", "refConsistency"];
-const ALLOWED = /^(zod|\.\/(impact|analysis|grounding|render|semantic|runtime|question|provider|providerBoundary|limits|outputSchema|textSafety|scopedPrompt|strictValidation|strictRuntime|strictVocabulary|refConsistency)|\.\.\/core\/(access|catalog|evidence|facts|identity))$/;
+const NEUTRAL = ["impact", "analysis", "grounding", "render", "semantic", "runtime", "question", "provider", "providerBoundary", "limits", "outputSchema", "textSafety", "scopedPrompt", "strictValidation", "strictRuntime", "strictVocabulary", "refConsistency", "causalPolicy"];
+const ALLOWED = /^(zod|\.\/(impact|analysis|grounding|render|semantic|runtime|question|provider|providerBoundary|limits|outputSchema|textSafety|scopedPrompt|strictValidation|strictRuntime|strictVocabulary|refConsistency|causalPolicy)|\.\.\/core\/(access|catalog|evidence|facts|identity))$/;
 
 export function engineViolations(source: string): string[] {
   const out: string[] = [];

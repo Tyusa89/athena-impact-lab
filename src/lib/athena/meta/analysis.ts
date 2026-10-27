@@ -38,7 +38,7 @@ export type MetaOutput = {
 
 /** What the model is told it is looking at. Server configuration, not user input; kept to a plain phrase so it cannot carry instructions or structure. */
 export const DEFAULT_PROMPT_SUBJECT = "SYNTHETIC business facts for a fictional company";
-const SUBJECT_RE = /^[A-Za-z0-9][A-Za-z0-9 ,.'-]{2,99}$/;
+export const SUBJECT_RE = /^[A-Za-z0-9][A-Za-z0-9 ,.'-]{2,99}$/;
 
 /** Facts-only prompt: every authorized record is represented by exactly one verified fact (enforced by the adapter), so raw
  * records add no evidence. Facts carry the record ids, values, units, department and direction; the two period dates are constant. */

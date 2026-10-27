@@ -45,6 +45,17 @@ Output schema literals (`verified:false`, `requires_human_approval:true`, `.stri
   as a claim). Count and order of hidden references in a text do not change the response. `direction`, `magnitude` and `unavailable` are unchanged: they concern metrics the role
   may discover, and are the only messages that can name an authorized metric.
 
+## 4b. H2.1: the scoped prompt profile (opt-in; NOT active)
+`meta/scopedPrompt.ts` adds `buildScopedMessages(question, authorized, ctx, discoverableMetrics, subject?)`. Nothing in the runtime, the server functions, the workbench or the UI calls it, and
+no request field can select it (a test pins both). The legacy `buildMessages` stays the default and the goldens are unchanged.
+
+* **No user text.** The question is read only to choose FOCUS keys: `mentionedIn(question)` matches catalog terms, and only keys the caller may *discover* survive (a department word expands only
+  to its discoverable metrics). The user's words are never copied. A question naming a hidden metric, a hidden department, a hidden record id or source, a made-up word or an instruction produces the
+  same bytes as one naming nothing.
+* **No record identifiers.** Facts carry `fact_id`, `metric`, `department`, `unit`, `prior`, `current`, `change_pct`, `change_pp`, `direction`. Citations still resolve on the server from fact ids.
+* **UNAVAILABLE_METRICS.** Discoverable metrics with no verified data (the policy's grant) are listed apart as `{metric, status:"no_verified_data"}`: no value, no department.
+* Requires `AuthorizedEvidence`; the grant comes from the server (`Prepared.discoverableMetrics`), never from a request.
+
 ## 5. Remaining limitations
 * **Outcome oracle.** Accept versus reject is still observable. If a caller can get a term into the model's text (for example through the question) they can learn that a
   recognised-but-hidden term is rejected while an unrecognised word is not. The messages reveal nothing and the model is told to use only VERIFIED_FACTS; closing this
@@ -54,4 +65,5 @@ Output schema literals (`verified:false`, `requires_human_approval:true`, `.stri
 * Ambiguous command words used with a flag-like or path-like next word in prose ("kill -" typed oddly) can still be flagged.
 * Both guards are bounded heuristics (alias matching; pattern matching of unsafe text). Paraphrases, look-alike characters beyond NFKC, and unusual encodings can evade them.
   React escaping remains the rendering defence.
+* H2.1 closes the question and record-id inputs for the scoped profile only; the live runtime still uses the legacy prompt until a later PR activates it. Strict mentions plumbing, uniform public rejection (the accept/reject oracle) and department-word refinement are H2.2/H2.3.
 * Prompt-side items from the Phase H audit (opaque record aliases, impact-aware prompt, spend limits, `/impact` wiring) are NOT part of H1.

@@ -35,6 +35,6 @@ export type StrictValidation =
  * option to relax strictness: the profile is fixed here.
  */
 export function validateStrictOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, discoverableMetrics: readonly string[]): StrictValidation {
-  const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true }, { exemptRecordIds: false, leakScope: "all" });
+  const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true, generalVocabulary: true }, { exemptRecordIds: false, leakScope: "all" });
   return v.ok ? { ok: true, output: v.output, findings: v.findings } : { ok: false, diagnostics: toDiagnostics(v.categories) };
 }

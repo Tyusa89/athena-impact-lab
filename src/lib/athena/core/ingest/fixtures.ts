@@ -20,8 +20,8 @@ export const BUSINESS_OPS_MAPPING: MappingSpec = {
 export const SUPPORT_DESK_CATALOG = {
   flatThresholdPct: 3,
   domains: [
-    { id: "Support", aliases: ["support", "service desk", "helpdesk"] },
-    { id: "CustomerExperience", aliases: ["customer experience", "cx"] },
+    { id: "Support", aliases: ["support", "service desk", "helpdesk"], generalTerms: ["support", "service desk", "helpdesk"] },
+    { id: "CustomerExperience", aliases: ["customer experience", "cx"], generalTerms: ["customer experience", "cx"] },
   ],
   metrics: [
     { key: "tickets_opened", label: "Tickets opened", domain: "Support", unit: "tickets", polarity: "lower_is_better", aggregation: "sum", aliases: ["ticket volume", "tickets opened", "tickets"] },

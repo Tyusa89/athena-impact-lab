@@ -18,6 +18,7 @@
 import { assertCatalog, goodDirection, metricLabel, type Catalog, type DomainIdOf, type MetricKeyOf } from "../core/catalog";
 import type { EvidenceLike } from "../core/evidence";
 import { INVISIBLE_CHARS, type VerifiedFact } from "./grounding";
+import { generalTermsOf, referencesData, strictEntities } from "./strictVocabulary";
 
 export type Lane = "interpretation" | "recommendation" | "gap";
 type Dir = "up" | "down" | "flat";
@@ -388,11 +389,16 @@ export interface SemanticScope {
   /** When anything but `undefined` or `false` (see `isStrictMentions`), ANY mention of a non-discoverable metric or department is rejected. When `false` or absent (the legacy default), a neutral mention of a metric in a department
    * the role has no access to at all stays allowed (gaps, hand-offs), but a metric in a department the role does access, which it may not discover, is always rejected. */
   strictMentions?: boolean;
+  /** Honoured only when exactly `true` (see `SemanticScopeOptions.generalVocabulary`). */
+  generalVocabulary?: boolean;
 }
 export interface SemanticScopeOptions {
   /** Explicit metric-level grant from the access-policy layer. Unknown keys are ignored. Absent: only metrics with verified facts are discoverable. */
   discoverable?: Iterable<string> | undefined;
   strictMentions?: boolean | undefined;
+  /** STRICT mode only. When exactly `true`, a mention of a hidden DEPARTMENT is allowed if the catalog declares the word generic (`DomainDef.generalTerms`) and no data-bearing noun is within two words of it.
+   * Metrics are never exempt. Any other value (including "true") leaves strict mode as it was: this is the relaxing direction, so only the exact boolean enables it. */
+  generalVocabulary?: boolean | undefined;
 }
 /** Strict mention enforcement is the DEFAULT-DENY side of the switch: only `undefined` (not configured) and exactly `false` (explicitly legacy) leave it off. Any other value
  * (`true`, the string "true", "false", 0, 1, null, an object, ...) is treated as strict, so a malformed or unexpected setting can never silently relax enforcement. */
@@ -403,7 +409,7 @@ export function semanticScope(authorized: readonly EvidenceLike[], facts: readon
   const known = new Set(catalog.metrics.map((m) => m.key));
   const discoverable = new Set<string>([...facts.map((f) => f.metric), ...[...(opts.discoverable ?? [])].filter((k) => known.has(k))].filter((k) => known.has(k)));
   const owner = departmentByMetric(catalog) as Record<string, string>;
-  return { facts, discoverable, departments: new Set([...discoverable].map((k) => owner[k]!)), catalog, strictMentions: isStrictMentions(opts.strictMentions) };
+  return { facts, discoverable, departments: new Set([...discoverable].map((k) => owner[k]!)), catalog, strictMentions: isStrictMentions(opts.strictMentions), generalVocabulary: opts.generalVocabulary === true };
 }
 /** `domain`: outside the role's discoverable scope (a hidden metric or department; the SAME code and wording whether the metric is in another department or the role's own).
  * `unavailable`: a metric the policy lets the role discover, with no verified data in this scenario. Messages never name unauthorized things or echo model text. */
@@ -443,9 +449,21 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
       }
     }
   }
-  for (const e of mentionedEntities(text, scope.catalog)) {
-    if (claimed.has(`${e.kind}:${e.key}`) || !hidden(e)) continue;
-    if (strict || sameDepartment(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
+  if (strict) {
+    // STRICT: the inflection-tolerant matcher (recognizes "revenues", "lead volumes", "closed deal", ...). A hidden METRIC is always rejected. A hidden DEPARTMENT word is rejected too, except plain department
+    // vocabulary the catalog declares generic, and only when the scope opted in with exactly `generalVocabulary: true`, the scope has a usable discoverable set, and no data-bearing noun is nearby.
+    const norm = semanticText(text);
+    const general = scope.generalVocabulary === true && scope.discoverable instanceof Set;
+    for (const e of strictEntities(norm, scope.catalog)) {
+      if (claimed.has(`${e.kind}:${e.key}`) || !hidden(e)) continue;
+      if (general && e.kind === "dept" && generalTermsOf(scope.catalog, e.key).has(e.term) && !referencesData(norm, e)) continue;
+      push({ code: "domain", message: SCOPE_MESSAGE(where) });
+    }
+  } else {
+    for (const e of mentionedEntities(text, scope.catalog)) {
+      if (claimed.has(`${e.kind}:${e.key}`) || !hidden(e)) continue;
+      if (sameDepartment(e)) push({ code: "domain", message: SCOPE_MESSAGE(where) });
+    }
   }
   return issues;
 }

@@ -79,3 +79,19 @@ them, and no request field can select, disable or weaken them: the profile is fi
 * H2.2: the public rejections are indistinguishable from each other, but accept versus reject is still observable. With the scoped prompt the caller can no longer steer the model to a hidden term, so the oracle has no input; it is not eliminated for text the model produces on its own. Timing of validation is not equalized. Homoglyph (look-alike character) spellings of a hidden term are not recognized.
 * H2.1 closes the question and record-id inputs for the scoped profile only; the live runtime still uses the legacy prompt until a later PR activates it. Strict mentions plumbing, uniform public rejection (the accept/reject oracle) and department-word refinement are H2.2/H2.3.
 * Prompt-side items from the Phase H audit (opaque record aliases, impact-aware prompt, spend limits, `/impact` wiring) are NOT part of H1.
+
+## 4d. Evidence-reference consistency (H2.4b, strict profile only, inactive)
+
+**The defect (G1).** The validator checked that every cited fact id is a known, authorized fact, and `supporting_ids` are derived from the cited facts. It never compared a sentence with the facts it cites, so "Lead volume increased." citing the revenue fact was accepted and carried Finance record ids as supporting evidence. This was an evidence-integrity problem, not an authorization bypass.
+
+**The rule** (`meta/refConsistency.ts`, run from `validateOutput` only when the server-side `ValidateProfile.refConsistency` is exactly `true`; `validateStrictOutput` is the only setter). For each interpretation and recommendation: every metric the text names that has a verified fact must be among the cited facts. The matcher is the strict vocabulary matcher (`strictEntities`), so inflections count. A failure is rejected with the one fixed public response; the internal diagnostic category is `relevance`. Citations are never rewritten, added or removed, and `supporting_ids` stay derived from the cited facts alone.
+
+**What this guarantees.** A sentence that names an available metric cites that metric's fact; a sentence naming two available metrics cites both; a direct claim cannot be backed by a different metric's records.
+
+**What it does not guarantee.**
+- It is mention-level consistency, not semantic proof. A cited fact that passes has not been shown to support the claim, and nothing checks that the claim is true (interpretations stay `verified: false`).
+- A sentence that names no available metric is generic and may cite any authorized fact (an unverified hypothesis, "Review the sales strategy."). Department vocabulary does not constrain citations: that would reject the generic language H2.3 accepts, and a department match would only look like verification.
+- Ordinary words that equal a catalog alias count as mentions: "Lead the review of the plan." is read as the leads metric and is rejected unless the leads fact is cited. This fails closed and is the known false-rejection case.
+- Over-citing is allowed. Under-citing a named metric is not.
+- Causal wording ("because", "due to", "driven by") is a separate gap (G2) and is not addressed here.
+- The missing-evidence lane has no references and is unchanged.

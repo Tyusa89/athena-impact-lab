@@ -9,6 +9,7 @@ import type { AnalysisContext } from "../core/facts";
 import { INVISIBLE_CHARS, buildVerifiedFacts, supportingIdsFor, verifyNoNumerals } from "./grounding";
 import { LIMITS } from "./limits";
 import { renderFindings, type VerifiedFinding } from "./render";
+import { refsConsistent } from "./refConsistency";
 import { checkSemantics, semanticScope, type SemanticScopeOptions } from "./semantic";
 import { UNSAFE_MESSAGE, unsafeTextKinds } from "./textSafety";
 
@@ -106,7 +107,8 @@ function isLegacyShape(json: unknown): boolean {
  */
 /** Validation profile. The defaults are the LEGACY behaviour (pinned by the goldens). The strict profile (`meta/strictValidation.ts`) turns both off: the model was given no record
  * identifiers, so none may appear, and any record id or source label, authorized or not, in model text is a leak. */
-export interface ValidateProfile { exemptRecordIds?: boolean; leakScope?: "withheld" | "all" }
+/** `refConsistency` (H2.4b): when exactly `true`, cited facts must be consistent with the metrics and departments the text names. Server-side only; legacy leaves it unset. */
+export interface ValidateProfile { exemptRecordIds?: boolean; leakScope?: "withheld" | "all"; refConsistency?: boolean }
 export function validateOutput(raw: string, authorized: readonly EvidenceLike[], allRecords: readonly EvidenceLike[], ctx: AnalysisContext, scopeOpts: SemanticScopeOptions = {}, profile: ValidateProfile = {}): ValidationResult {
   assertCatalog(ctx.catalog); // before anything else, so no early return can skip it
   let json: unknown;
@@ -143,6 +145,11 @@ export function validateOutput(raw: string, authorized: readonly EvidenceLike[],
   // Scope is metric-level: metrics with verified data plus what the access-policy layer explicitly granted. Not inferred from departments.
   const scope = semanticScope(authorized, facts, ctx.catalog, scopeOpts);
   for (const l of lanes) for (const i of checkSemantics(l.text, l.lane, scope, l.where)) issues.push({ code: i.code, message: i.message });
+  // Strict profile only: cited facts must match what the text names (mention-level, never rewritten). Unknown ids are already reported above.
+  if (profile.refConsistency === true && !badRefs.size) {
+    const cited = [...out.interpretations.map((x, i) => ({ ...x, where: `interpretation ${i + 1}` })), ...out.recommendations.map((x, i) => ({ ...x, where: `proposed action ${i + 1}` }))];
+    for (const x of cited) if (!refsConsistent(x.text, x.refs, facts, ctx.catalog)) issues.push({ code: "relevance", message: `Cited facts do not match the metrics named in ${x.where}` });
+  }
   if (issues.length) return fail(...issues);
   const enrich = <T extends { refs: string[] }>(x: T) => ({ ...x, refs: [...new Set(x.refs)], supporting_ids: supportingIdsFor(x.refs, facts) });
   return {

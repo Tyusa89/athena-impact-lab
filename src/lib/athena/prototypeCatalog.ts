@@ -6,10 +6,10 @@ import type { Catalog } from "./core/catalog";
 export const PROTOTYPE_CATALOG = {
   flatThresholdPct: 3,
   domains: [
-    { id: "Marketing", aliases: ["marketing", "campaigns", "campaign", "advertising", "paid social", "paid media", "ad spend", "ad spending"] },
-    { id: "Sales", aliases: ["sales team", "sales teams", "sales pipeline", "sales reps", "salespeople", "sales", "pipeline"] },
-    { id: "Operations", aliases: ["operations", "operational", "warehouse", "logistics", "supply chain", "suppliers", "supplier", "inventory"] },
-    { id: "Finance", aliases: ["finance", "financial", "accounting", "ledger", "budgets", "budget"] },
+    { id: "Marketing", aliases: ["marketing", "campaigns", "campaign", "advertising", "paid social", "paid media", "ad spend", "ad spending"], generalTerms: ["marketing", "campaign", "campaigns", "advertising"] },
+    { id: "Sales", aliases: ["sales team", "sales teams", "sales pipeline", "sales reps", "salespeople", "sales", "pipeline"], generalTerms: ["sales", "sales team", "sales teams", "sales reps", "salespeople"] },
+    { id: "Operations", aliases: ["operations", "operational", "warehouse", "logistics", "supply chain", "suppliers", "supplier", "inventory"], generalTerms: ["operations", "operational"] },
+    { id: "Finance", aliases: ["finance", "financial", "accounting", "ledger", "budgets", "budget"], generalTerms: ["finance", "financial", "accounting", "budget", "budgets"] },
   ],
   metrics: [
     { key: "leads", label: "Marketing leads", domain: "Marketing", unit: "leads", polarity: "higher_is_better", aggregation: "sum", aliases: ["lead volume", "lead count", "lead generation", "lead flow", "lead inflow", "inbound leads", "new leads", "leads"] },

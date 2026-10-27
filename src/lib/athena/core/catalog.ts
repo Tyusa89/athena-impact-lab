@@ -24,6 +24,9 @@ export interface DomainDef {
   readonly id: string;
   /** Lower-case phrases that refer to this domain in free text. */
   readonly aliases: readonly string[];
+  /** OPTIONAL. The subset of `aliases` that are plain department vocabulary ("sales", "budget", "operations"), as opposed to words that name something carrying data ("pipeline", "inventory", "ledger").
+   * Only the strict validator's generic-vocabulary rule reads it. Absent means none: a catalog that does not declare it is validated exactly as before. */
+  readonly generalTerms?: readonly string[];
 }
 export interface Catalog {
   readonly metrics: readonly MetricDef[];
@@ -90,6 +93,7 @@ function shapeProblems(c: unknown): string[] {
     if (hasAccessor(d)) out.push(`domains[${i}] must not have accessor properties`);
     if (typeof d["id"] !== "string") out.push(`domains[${i}].id must be a string`);
     if (!isStringArray(d["aliases"])) out.push(`domains[${i}].aliases must be an array of strings`);
+    if (d["generalTerms"] !== undefined && !isStringArray(d["generalTerms"])) out.push(`domains[${i}].generalTerms must be an array of strings`);
   });
   return out;
 }
@@ -125,6 +129,15 @@ export function validateCatalog(c: Catalog): string[] {
   };
   for (const m of c.metrics) for (const a of m.aliases) claim(a, `metric:${m.key}`);
   for (const d of c.domains) for (const a of d.aliases) claim(a, `domain:${d.id}`);
+  // Generic vocabulary can only be declared from a domain's own aliases (so it can never introduce a new word), once each.
+  for (const d of c.domains) if (d.generalTerms) {
+    const seen = new Set<string>();
+    for (const t of d.generalTerms) {
+      if (!d.aliases.includes(t)) problems.push(`generalTerms entry "${t}" of domain ${d.id} is not one of its aliases`);
+      if (seen.has(t)) problems.push(`generalTerms entry "${t}" of domain ${d.id} is repeated`);
+      seen.add(t);
+    }
+  }
   if (!(c.flatThresholdPct >= 0)) problems.push("flatThresholdPct must be a non-negative number");
   return problems;
 }

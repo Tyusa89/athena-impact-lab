@@ -53,7 +53,8 @@ describe("every rejection is ONE byte-identical public response", () => {
     ["hidden same-dept claim (2nd metric)", reply("Customer acquisition cost rose.")], ["hidden same-dept mention (2nd metric)", reply("Customer acquisition cost may be worth a look.")],
     ["hidden cross-dept claim", reply("Recognized revenue fell.")], ["hidden cross-dept mention", reply("Recognized revenue may be worth a look.")],
     ["hidden cross-dept claim (Sales)", reply("Sales conversion rate fell.")], ["hidden cross-dept mention (Operations)", reply("Backorder rate may be worth a look.")],
-    ["hidden department claim", reply("Finance weakened.")], ["hidden department mention", reply("Finance may be worth a look.")], ["hidden department mention (Operations)", reply("Operations capacity may matter.")],
+    ["hidden department claim", reply("Finance weakened.")], ["hidden data-bearing department word (ledger)", reply("The ledger may be worth a look.")], ["hidden data-bearing department word (inventory)", reply("Inventory may be worth a look.")],
+    ["hidden department word next to a data noun", reply("Operations capacity may matter.")], ["hidden department word next to a data noun (2)", reply("Review the sales numbers.")],
     // record ids and source labels: hidden and authorized
     ["hidden record id", reply("Review VH-FIN-001-Q2 for context.")], ["hidden source label", reply("See SYN-GL Revenue Summary for context.")],
     ["authorized record id", reply("Review VH-MKT-001-Q2 for context.")], ["authorized source label", reply("See SYN-CRM Campaign Export for context.")],
@@ -62,7 +63,7 @@ describe("every rejection is ONE byte-identical public response", () => {
     ["zero-width inside", reply("Lead​ quality may help.")], ["soft hyphen inside", reply("Le­ad quality may help.")], ["full-width", reply("ＬＥＡＤ　ＱＵＡＬＩＴＹ may help.")], ["upper case", reply("LEAD QUALITY may help.")],
     ["hyphenated", reply("Lead-quality may help.")], ["underscored", reply("lead_quality may help.")], ["extra spaces", reply("Lead   quality may help.")], ["no-break space", reply("Lead quality may help.")],
     ["alias: CAC", reply("CAC may help.")], ["alias: acquisition costs", reply("Acquisition costs may help.")], ["alias: mql rate", reply("MQL-rate may help.")], ["alias: top line", reply("The top line may help.")],
-    ["alias: department word", reply("The budget may help.")], ["zero-width id", reply("Review VH​-FIN-001-Q2 now.")], ["full-width source", reply("See ＳＹＮ-ＧＬ Revenue Summary now.")],
+    ["alias: non-generic department word", reply("The ledger may help.")], ["alias: department word with a data noun", reply("The budget variance may help.")], ["zero-width id", reply("Review VH​-FIN-001-Q2 now.")], ["full-width source", reply("See ＳＹＮ-ＧＬ Revenue Summary now.")],
     // every other validation failure
     ["not JSON", "this is not json"], ["schema: extra key", JSON.stringify({ interpretations: [], missing_evidence: [], recommendations: [], extra: 1 })],
     ["schema: unverified flag", JSON.stringify({ interpretations: [{ text: "Lead volume moved.", verified: true, refs: ["F-leads"] }], missing_evidence: [], recommendations: [] })],
@@ -103,7 +104,7 @@ describe("every rejection is ONE byte-identical public response", () => {
 });
 
 describe("strict enforcement in all three output lanes", () => {
-  const HIDDEN = ["Lead quality may be worth a look.", "Recognized revenue may be worth a look.", "Finance may be worth a look.", "Lead quality fell.", "Review VH-FIN-001-Q2 for context."];
+  const HIDDEN = ["Lead quality may be worth a look.", "Recognized revenue may be worth a look.", "The ledger may be worth a look.", "Lead quality fell.", "Review VH-FIN-001-Q2 for context."];
   it.each([["interp"], ["rec"], ["gap"]] as const)("lane %s rejects hidden references, directional or neutral, metric, department or identifier", async (lane) => {
     for (const t of HIDDEN) expect(pub(await run(reply(t, lane))), `${lane}: ${t}`).toBe(PUBLIC);
   });
@@ -287,20 +288,28 @@ describe("the strict path is not activated", () => {
   it("makes no network call", async () => { await run(reply("Lead volume rose.")); expect(tripwire).not.toHaveBeenCalled(); });
 });
 
-describe("sweep: every label, key and alias of every metric and department the caller cannot discover is rejected the same way", () => {
+describe("sweep: every label, key and alias of every metric and department the caller cannot discover", () => {
   it("marketing demo role (data for Marketing and Sales metrics): Operations and Finance vocabulary, every spelling", () => {
     const lead = authorizeDemo({ scenarioId: "baseline", roleId: "marketing" });
-    const hidden = PROTOTYPE_CATALOG.metrics.filter((m) => m.domain === "Operations" || m.domain === "Finance");
-    const terms = [
-      ...hidden.flatMap((m) => [m.label, m.key.replace(/_/g, " "), ...m.aliases]),
-      ...PROTOTYPE_CATALOG.domains.filter((d) => d.id === "Operations" || d.id === "Finance").flatMap((d) => [d.id, ...d.aliases]),
-    ].filter((t) => !/\d/.test(t));
-    expect(terms.length).toBeGreaterThan(30);
+    const hiddenDomains = PROTOTYPE_CATALOG.domains.filter((d) => d.id === "Operations" || d.id === "Finance");
+    const general = new Set<string>(hiddenDomains.flatMap((d) => [...(d.generalTerms ?? [])]));
+    const check = (text: string) => validateStrictOutput(reply(text, "gap"), lead.authorized, lead.withheld, PROTOTYPE_RUNTIME.analysis, lead.discoverableMetrics);
+    const spellings = (t: string) => [`Review ${t} next.`, `${t} fell.`, `${t.toUpperCase()} may help.`, `${t.replace(/ /g, "-")} may help.`];
+    const metricTerms = PROTOTYPE_CATALOG.metrics.filter((m) => m.domain === "Operations" || m.domain === "Finance").flatMap((m) => [m.label, m.key.replace(/_/g, " "), ...m.aliases]).filter((t) => !/\d/.test(t));
+    const deptTerms = hiddenDomains.flatMap((d) => [d.id, ...d.aliases]).filter((t) => !/\d/.test(t));
+    expect(metricTerms.length).toBeGreaterThan(20);
     const outcomes = new Set<string>();
-    for (const t of terms) for (const text of [`Review ${t} next.`, `${t} fell.`, `${t.toUpperCase()} may help.`, `${t.replace(/ /g, "-")} may help.`]) {
-      const v = validateStrictOutput(reply(text, "gap"), lead.authorized, lead.withheld, PROTOTYPE_RUNTIME.analysis, lead.discoverableMetrics);
-      expect(v.ok, text).toBe(false);
-      if (!v.ok) outcomes.add(JSON.stringify(v.diagnostics));
+    // a hidden METRIC is rejected in every spelling, neutral or directional: never exempt
+    for (const t of metricTerms) for (const text of spellings(t)) { const v = check(text); expect(v.ok, text).toBe(false); if (!v.ok) outcomes.add(JSON.stringify(v.diagnostics)); }
+    // a hidden DEPARTMENT word: a claim is always rejected; a neutral mention only if the catalog did not declare the word generic
+    for (const t of deptTerms) {
+      const claim = check(`${t} fell.`); expect(claim.ok, `${t} fell.`).toBe(false); if (!claim.ok) outcomes.add(JSON.stringify(claim.diagnostics));
+      for (const text of [`Review ${t} next.`, `${t.toUpperCase()} may help.`, `${t.replace(/ /g, "-")} may help.`]) {
+        const v = check(text);
+        const isGeneral = general.has(t.toLowerCase().replace(/-/g, " "));
+        expect(v.ok, text).toBe(isGeneral);
+        if (!v.ok) outcomes.add(JSON.stringify(v.diagnostics));
+      }
     }
     expect([...outcomes]).toEqual([JSON.stringify(["domain"])]);
   });

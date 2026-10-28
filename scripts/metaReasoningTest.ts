@@ -13,8 +13,16 @@ import type {
   ProviderEnv,
 } from "../src/lib/athena/meta/provider";
 import { META_ENDPOINT, META_MODEL, museSpark } from "../src/lib/athena/meta/providers/muse";
+import { authorizeRequest } from "../src/lib/athena/meta/runtime";
+import { renderFindings } from "../src/lib/athena/meta/render";
 import { runStrictAnalysis, type StrictResult } from "../src/lib/athena/meta/strictRuntime";
 import type { DiagnosticCategory } from "../src/lib/athena/meta/strictValidation";
+import {
+  evaluateFindings,
+  evaluateReasoning,
+  type FindingsEvaluation,
+  type ReasoningEvaluation,
+} from "./reasoningQuality";
 
 /** Set in the shell for ONE live run; never written anywhere by this runner. */
 export const CONFIRM_ENV = "G41_LIVE_CONFIRM";
@@ -24,32 +32,40 @@ export const ALLOWED_URL = META_ENDPOINT;
 export const MAX_OUTBOUND_REQUESTS = 1;
 /** The synthetic scope: only these metrics have records the caller may use; everything else is withheld. */
 export const TEST_METRICS = ["leads", "conversion_rate", "cac"] as const;
+/** The directions the synthetic baseline scenario was built with; the findings evaluation compares Athena's own rendered findings with these. */
+export const EXPECTED_DIRECTIONS = { leads: "up", conversion_rate: "down", cac: "up" } as const;
 const SCENARIO = { scenarioId: "baseline", roleId: "marketing", ownerConfirmed: true } as const;
 
-/** A fixed, synthetic reply for the dry run: observations, a hedged hypothesis, missing evidence and a human-approved investigation. Contains no numbers. */
+/** A fixed, synthetic reply for the dry run: specific unverified hypotheses that link the cited facts, concrete missing evidence, and actionable human-approved investigations. It does not restate
+ * the observed movements (Athena renders those itself) and contains no numbers. */
 export const DRY_RUN_REPLY = JSON.stringify({
   interpretations: [
     {
-      text: "Lead volume increased while conversion rate decreased.",
+      text: "A shift toward lower-intent lead sources may be adding volume that dilutes the conversion rate.",
       verified: false,
       refs: ["F-leads", "F-conversion_rate"],
     },
-    { text: "Customer acquisition cost also increased.", verified: false, refs: ["F-cac"] },
     {
-      text: "Rising acquisition cost may relate to the lower conversion rate.",
+      text: "Slower sales follow-up on a larger intake of leads may leave more acquisition cost spent on prospects who never close.",
       verified: false,
-      refs: ["F-cac", "F-conversion_rate"],
+      refs: ["F-leads", "F-cac"],
     },
   ],
   missing_evidence: [
-    "Channel-level lead and conversion data would help.",
-    "A cost breakdown behind acquisition cost would help.",
+    "Lead counts and conversion by source, so lower-intent sources can be separated from the rest.",
+    "Lead quality scores by source for both periods, which Athena does not currently have.",
+    "Time from lead creation to first sales contact, split by source.",
   ],
   recommendations: [
     {
-      text: "Investigate whether the lead source mix changed alongside conversion.",
+      text: "Segment leads and conversion by source to test whether lower-intent sources account for the gap.",
       requires_human_approval: true,
       refs: ["F-leads", "F-conversion_rate"],
+    },
+    {
+      text: "Break down acquisition cost by lead source and compare it with conversion for the same sources.",
+      requires_human_approval: true,
+      refs: ["F-cac", "F-leads", "F-conversion_rate"],
     },
   ],
 });
@@ -87,25 +103,24 @@ export interface Report {
   usage: Record<string, number | string> | "n/a (dry-run)" | "n/a";
   checks: SafetyCheck[];
   allSafetyChecksPassed: boolean;
-  usefulness: {
-    observesLeads: boolean;
-    observesConversion: boolean;
-    observesCac: boolean;
-    hasHypothesisMarkedUnverified: boolean;
-    namesMissingEvidence: boolean;
-    recommendsInvestigation: boolean;
-  } | null;
+  /** Deterministic lane: Athena's own rendered findings (independent of the model, and available even when the reply is rejected). */
+  findings: FindingsEvaluation | null;
+  /** Model lane: heuristic quality of an ACCEPTED reply; null when the reply was not accepted. A low score never rejects anything. */
+  reasoning: ReasoningEvaluation | null;
   /** Only when explicitly requested with showResponse. Synthetic data; never contains credentials. */
   response?: string | null;
 }
 
-/** The synthetic scope: the demo marketing role, but only the three test metrics carry records the caller may use. */
+/** The synthetic scope: the demo marketing role, with only the three test metrics' RECORDS permitted. The policy's own metric-discovery grant (`discoverableMetrics`: the NAMES of the
+ * metrics of the departments the role holds, no values) is passed through unchanged, so the scoped prompt can list a discoverable metric without data under UNAVAILABLE_METRICS and the
+ * validator treats it as discoverable-but-unavailable (it may be named, e.g. as missing evidence, but nothing may be claimed about it) instead of as an unauthorized metric. */
 export const testPolicy = (): AccessPolicy<PrototypeEvidence> => ({
   evidenceScope: (ctx) => {
     const base = demoAccessPolicy.evidenceScope(ctx);
     return {
       tenantId: base.tenantId,
       permits: (e) => base.permits(e) && (TEST_METRICS as readonly string[]).includes(e.metric),
+      ...(base.discoverableMetrics ? { discoverableMetrics: base.discoverableMetrics } : {}),
     };
   },
 });
@@ -221,6 +236,17 @@ export async function runReasoningTest(
     { onDiagnostics: (c) => diag.push([...c]) },
   );
 
+  // The deterministic lane is evaluated on its own, from the same authorization the run used: it needs no model reply, so it is available for a rejected reply too.
+  const prep = await authorizeRequest(SCENARIO, {
+    ...PROTOTYPE_RUNTIME,
+    policy: testPolicy() as AccessPolicy,
+  });
+  const findings = prep.ok
+    ? evaluateFindings(
+        renderFindings(prep.records, PROTOTYPE_RUNTIME.analysis),
+        EXPECTED_DIRECTIONS,
+      )
+    : null;
   const outcome =
     result.state === "ok"
       ? "accepted"
@@ -259,7 +285,7 @@ export async function runReasoningTest(
     },
     {
       name: "an accepted reply contains no record id, source label or withheld metric",
-      pass: !accepted || !/vh-|syn-|revenue|mql|lead quality|fulfil|backorder/.test(texts),
+      pass: !accepted || !/vh-|syn-|revenue|fulfil|backorder/.test(texts),
     },
   ];
   const report: Report = {
@@ -280,19 +306,12 @@ export async function runReasoningTest(
       : "n/a (dry-run)",
     checks,
     allSafetyChecksPassed: checks.every((c) => c.pass),
-    usefulness: accepted
-      ? {
-          observesLeads: /\blead/.test(texts),
-          observesConversion: /conversion/.test(texts),
-          observesCac: /acquisition cost/.test(texts),
-          hasHypothesisMarkedUnverified:
-            accepted.output.interpretations.some((i) => /\b(may|might|could)\b/i.test(i.text)) &&
-            accepted.output.interpretations.every((i) => i.verified === false),
-          namesMissingEvidence: accepted.output.missing_evidence.length > 0,
-          recommendsInvestigation: accepted.output.recommendations.some((r) =>
-            /investigat/i.test(r.text),
-          ),
-        }
+    findings,
+    reasoning: accepted
+      ? evaluateReasoning(
+          accepted.output,
+          accepted.findings.map((f) => f.fact_id),
+        )
       : null,
     ...(opts.showResponse ? { response: cap.seen.content } : {}),
   };
@@ -323,12 +342,24 @@ export function formatReport(r: Report | PrerequisiteFailure): string {
     `safety checks: ${r.allSafetyChecksPassed ? "ALL PASSED" : "FAILED"}`,
     ...r.checks.map((c) => `  [${c.pass ? "pass" : "FAIL"}] ${c.name}`),
   ];
-  if (r.usefulness)
+  if (r.findings)
     L.push(
-      "usefulness signals (heuristic, for the founder to judge):",
-      ...Object.entries(r.usefulness).map(([k, v]) => `  [${v ? "yes" : "no "}] ${k}`),
+      `findings lane (deterministic, independent of the model): ${r.findings.allPresent ? "all present" : "MISSING"}, directions ${r.findings.directionsMatch ? "match" : "DO NOT MATCH"}`,
+      ...Object.entries(r.findings.perMetric).map(
+        ([m, v]) =>
+          `  [${v.present && v.direction === v.expected ? "yes" : "no "}] ${m}: ${v.direction ?? "absent"} (expected ${v.expected})`,
+      ),
     );
-  else L.push("usefulness signals: not available (the reply was not accepted)");
+  if (r.reasoning)
+    L.push(
+      `model reasoning (heuristic, 0-2 each; for the founder to judge): ${r.reasoning.total}/${r.reasoning.max} ${r.reasoning.verdict}`,
+      `  hypothesis specificity: ${r.reasoning.hypothesisSpecificity}`,
+      `  relevance to authorized facts: ${r.reasoning.relevance}`,
+      `  missing-evidence quality: ${r.reasoning.missingEvidenceQuality}`,
+      `  actionable investigation: ${r.reasoning.actionableInvestigation}`,
+      `  appropriate uncertainty: ${r.reasoning.appropriateUncertainty}`,
+    );
+  else L.push("model reasoning: not available (the reply was not accepted)");
   if ("response" in r)
     L.push(
       "--- model response (local inspection, synthetic data) ---",

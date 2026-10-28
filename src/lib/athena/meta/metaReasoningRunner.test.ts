@@ -81,16 +81,10 @@ describe("dry-run (the default): offline, no key, real strict validation", () =>
     expect(r.usage).toBe("n/a (dry-run)");
     expect(tripwire).not.toHaveBeenCalled();
   });
-  it("the fake reply shows observations, a hedged hypothesis, missing evidence and a human-approved investigation", async () => {
+  it("the fake reply is a specific, human-approved investigation, and the two lanes are evaluated apart", async () => {
     const r = report(await runReasoningTest({ mode: "dry-run", env: {} }));
-    expect(r.usefulness).toEqual({
-      observesLeads: true,
-      observesConversion: true,
-      observesCac: true,
-      hasHypothesisMarkedUnverified: true,
-      namesMissingEvidence: true,
-      recommendsInvestigation: true,
-    });
+    expect(r.findings).toMatchObject({ allPresent: true, directionsMatch: true });
+    expect(r.reasoning).toMatchObject({ verdict: "useful", total: 10 });
     const parsed = JSON.parse(DRY_RUN_REPLY);
     expect(parsed.interpretations.every((i: { verified: boolean }) => i.verified === false)).toBe(
       true,
@@ -114,24 +108,41 @@ describe("dry-run (the default): offline, no key, real strict validation", () =>
     expect(seen.length).toBe(1);
     const sent = JSON.stringify(seen[0]!.messages);
     for (const id of ["F-leads", "F-conversion_rate", "F-cac"]) expect(sent).toContain(id);
-    expect(sent).not.toMatch(
-      /VH-|SYN-|revenue|mql_rate|closed_deals|fulfillment|backorder|F-revenue/i,
+    expect(sent).not.toMatch(/VH-|SYN-|revenue|fulfillment|backorder|F-revenue|F-mql|F-closed/i);
+    // The policy's discovery grant is preserved: the NAMES of the role's other metrics are listed as unavailable, with no value.
+    expect(sent).toContain(
+      'UNAVAILABLE_METRICS (JSON): [{\\"metric\\":\\"mql_rate\\",\\"status\\":\\"no_verified_data\\"},{\\"metric\\":\\"closed_deals\\",\\"status\\":\\"no_verified_data\\"}]',
     );
-    expect(sent).toContain("UNAVAILABLE_METRICS (JSON): []");
   });
-  it("hidden metrics stay rejected: a reply about withheld Finance or same-department metrics is refused", async () => {
-    for (const text of ["Recognized revenue declined.", "Lead quality declined."]) {
-      const r = report(
-        await runReasoningTest({
-          mode: "dry-run",
-          env: {},
-          provider: fakeProvider(reply({ i: [{ text, verified: false, refs: ["F-leads"] }] })),
-        }),
-      );
-      expect(r.outcome, text).toBe("rejected");
-      expect(r.diagnostics, text).toEqual(["domain"]);
-      expect(r.usefulness).toBeNull();
-    }
+  it("hidden metrics stay rejected: a reply about a withheld Finance metric is refused as out of scope", async () => {
+    const r = report(
+      await runReasoningTest({
+        mode: "dry-run",
+        env: {},
+        provider: fakeProvider(
+          reply({
+            i: [{ text: "Recognized revenue declined.", verified: false, refs: ["F-leads"] }],
+          }),
+        ),
+      }),
+    );
+    expect(r.outcome).toBe("rejected");
+    expect(r.diagnostics).toEqual(["domain"]);
+    expect(r.reasoning).toBeNull();
+    expect(r.findings).toMatchObject({ directionsMatch: true }); // the deterministic lane does not depend on the reply
+  });
+  it("a metric the role may discover but has no data for may not be described: it is rejected as unavailable, not as out of scope", async () => {
+    const r = report(
+      await runReasoningTest({
+        mode: "dry-run",
+        env: {},
+        provider: fakeProvider(
+          reply({ i: [{ text: "Lead quality declined.", verified: false, refs: ["F-leads"] }] }),
+        ),
+      }),
+    );
+    expect(r.outcome).toBe("rejected");
+    expect(r.diagnostics).toEqual(["unavailable"]);
   });
   it("rejected outputs stay safely rejected and are reported by category only", async () => {
     const causal = reply({
@@ -252,7 +263,7 @@ describe("a permitted live run (against a LOCAL mock transport) is one request t
     expect(body.model).toBe(META_MODEL);
     expect(body.max_tokens).toBe(2000);
     expect(body.stream).toBe(false);
-    expect(JSON.stringify(body)).not.toMatch(/VH-|revenue|mql_rate/i);
+    expect(JSON.stringify(body)).not.toMatch(/VH-|revenue|F-mql/i);
     expect(r.mode).toBe("live");
     expect(r.model).toBe(META_MODEL);
     expect(r.outcome).toBe("accepted");
@@ -409,11 +420,11 @@ describe("credentials and payloads stay out of routine output", () => {
     const plain = report(await runReasoningTest({ mode: "dry-run", env: {} }));
     expect("response" in plain).toBe(false);
     expect(formatReport(plain)).not.toMatch(
-      /Lead volume increased|Investigate whether|F-leads|VERIFIED_FACTS|Brief:/,
+      /A shift toward lower-intent lead sources|Segment leads and conversion|F-leads|VERIFIED_FACTS|Brief:/,
     );
     const shown = report(await runReasoningTest({ mode: "dry-run", env: {}, showResponse: true }));
     expect(shown.response).toBe(DRY_RUN_REPLY);
-    expect(formatReport(shown)).toContain("Lead volume increased");
+    expect(formatReport(shown)).toContain("A shift toward lower-intent lead sources");
     expect(formatReport(shown)).not.toMatch(/VERIFIED_FACTS|Brief:/); // the prompt is never shown
   });
   it("repeated dry runs are identical", async () => {
@@ -438,10 +449,10 @@ describe.skipIf(!hasBun)(
       expect(r.stdout).toContain("mode: dry-run");
       expect(r.stdout).toContain("outbound requests: 0");
       expect(r.stdout).toContain("safety checks: ALL PASSED");
-      expect(r.stdout).not.toMatch(/Lead volume increased|F-leads/);
+      expect(r.stdout).not.toMatch(/A shift toward lower-intent lead sources|F-leads/);
     });
     it("--show-response prints the synthetic reply only when asked", () => {
-      expect(cli(["--show-response"]).stdout).toContain("Lead volume increased");
+      expect(cli(["--show-response"]).stdout).toContain("A shift toward lower-intent lead sources");
     });
     it("--live without the prerequisites is refused with exit 2 and nothing is sent", () => {
       const r = cli(["--live"]);

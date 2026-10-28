@@ -1,0 +1,522 @@
+import { describe, expect, it, vi } from "vitest";
+import { evaluateReasoning } from "../../../../scripts/reasoningQuality";
+import { AuthorizationError, authorizeEvidence, type AccessPolicy } from "../core/access";
+import {
+  authorizeDemo,
+  demoAccessPolicy,
+  demoIdentity,
+  type PrototypeEvidence,
+} from "../prototypeAdapter";
+import { PROTOTYPE_CATALOG } from "../prototypeCatalog";
+import { PROTOTYPE_RUNTIME } from "./adapter.server";
+import { OutputSchema } from "./analysis";
+import { buildAuthorizedFacts, type VerifiedFact } from "./grounding";
+import type { ModelOutcome, ModelProvider } from "./provider";
+import { refsConsistent } from "./refConsistency";
+import { buildScopedMessages } from "./scopedPrompt";
+import { checkSemantics, semanticScope as genericScope } from "./semantic";
+import { semanticScope as facadeScope } from "./semanticGuards";
+import { runStrictAnalysis } from "./strictRuntime";
+import { validateStrictOutput, type DiagnosticCategory } from "./strictValidation";
+
+// G4.6: offline regression tests for evidence-integrity hardening: generic citation integrity (C11/C12), flat-direction consistency (F5), explicit discoverability (F2) and characterization of the
+// undecided policies E17/E18. Synthetic data and fake providers only; the vitest global fetch is a tripwire. No test sends a request to Meta.
+const tripwire = vi.fn(() => {
+  throw new Error("network call attempted");
+});
+vi.stubGlobal("fetch", tripwire);
+
+const ENV = { META_MODEL_API_KEY: "sk-test-not-real", META_MODEL_ENABLED: "true" };
+interface Fake extends ModelProvider {
+  calls: number;
+}
+const fake = (content: string): Fake => ({
+  id: "t",
+  model: "t",
+  displayName: "T",
+  calls: 0,
+  status: () => ({ keyConfigured: true, ownerEnabled: true }),
+  blockedCode: () => null,
+  async complete(): Promise<ModelOutcome> {
+    this.calls++;
+    return { kind: "completion", content, truncated: false, usage: { max_tokens_sent: 2000 } };
+  },
+});
+const reply = (o: { i?: object[]; g?: string[]; r?: object[] }) =>
+  JSON.stringify({
+    interpretations: o.i ?? [],
+    missing_evidence: o.g ?? [],
+    recommendations: o.r ?? [],
+  });
+const I = (text: string, ...refs: string[]) => ({ text, verified: false, refs });
+const R = (text: string, ...refs: string[]) => ({ text, requires_human_approval: true, refs });
+
+async function run(
+  content: string,
+  over: { role?: string; scenario?: string; policy?: AccessPolicy<PrototypeEvidence> } = {},
+) {
+  const provider = fake(content);
+  const cats: DiagnosticCategory[] = [];
+  const result = await runStrictAnalysis(
+    { scenarioId: over.scenario ?? "baseline", roleId: over.role ?? "exec", ownerConfirmed: true },
+    ENV,
+    tripwire as unknown as typeof fetch,
+    {
+      ...PROTOTYPE_RUNTIME,
+      ...(over.policy ? { policy: over.policy as AccessPolicy } : {}),
+      provider,
+    },
+    { onDiagnostics: (c) => cats.push(...c) },
+  );
+  return { result, provider, cats: [...new Set(cats)].sort() };
+}
+const verdict = async (content: string, over: Parameters<typeof run>[1] = {}) => {
+  const r = await run(content, over);
+  return { state: r.result.state, cats: r.cats };
+};
+
+describe("C11/C12: generic statements may not cite unrelated facts", () => {
+  it("accepts a generic statement that cites a fact in the department it names (positive)", async () => {
+    for (const [text, ref] of [
+      ["Review the sales strategy.", "F-conversion_rate"],
+      ["Review the sales strategy.", "F-closed_deals"],
+      ["Review the marketing plan.", "F-leads"],
+      ["We should discuss the budget.", "F-revenue"],
+    ] as const) {
+      expect(await verdict(reply({ r: [R(text, ref)] })), `${text} ${ref}`).toEqual({
+        state: "ok",
+        cats: [],
+      });
+    }
+  });
+  it("accepts a sentence that spans two departments when at least one cited fact is in a named one", async () => {
+    expect(
+      await verdict(
+        reply({
+          r: [R("Marketing and sales should communicate.", "F-leads", "F-conversion_rate")],
+        }),
+      ),
+    ).toEqual({ state: "ok", cats: [] });
+    expect(
+      await verdict(
+        reply({
+          r: [R("Review marketing and sales handoffs.", "F-leads", "F-cac", "F-conversion_rate")],
+        }),
+      ),
+    ).toEqual({ state: "ok", cats: [] });
+  });
+  it("rejects a generic statement whose only citations are outside the department it names (C11)", async () => {
+    for (const [text, refs] of [
+      ["Review the sales strategy.", ["F-revenue"]],
+      ["Review the sales strategy.", ["F-revenue", "F-backorder_rate"]],
+      ["Review the marketing plan.", ["F-revenue"]],
+      ["We should discuss the budget.", ["F-leads"]],
+      ["Operations may need additional coordination.", ["F-leads", "F-cac"]],
+    ] as const) {
+      expect(await verdict(reply({ r: [R(text, ...refs)] })), `${text} ${refs}`).toEqual({
+        state: "rejected",
+        cats: ["relevance"],
+      });
+      expect(
+        await verdict(reply({ i: [I(text, ...refs)] })),
+        `${text} ${refs} (interpretation)`,
+      ).toEqual({ state: "rejected", cats: ["relevance"] });
+    }
+  });
+  it("accepts a generic reference to a decline or rise only when a cited fact moved that way, and rejects it otherwise (C12)", async () => {
+    // baseline: leads and cac rose; conversion rate and revenue fell
+    expect(
+      (
+        await verdict(
+          reply({ i: [I("The decline may reflect seasonal demand.", "F-conversion_rate")] }),
+        )
+      ).state,
+    ).toBe("ok");
+    expect(
+      (await verdict(reply({ i: [I("The recent increase may reflect promotions.", "F-leads")] })))
+        .state,
+    ).toBe("ok");
+    expect(
+      await verdict(reply({ i: [I("The decline may reflect seasonal demand.", "F-leads")] })),
+    ).toEqual({ state: "rejected", cats: ["relevance"] });
+    expect(await verdict(reply({ i: [I("The drop may be seasonal.", "F-cac")] }))).toEqual({
+      state: "rejected",
+      cats: ["relevance"],
+    });
+    expect(
+      await verdict(reply({ r: [R("Investigate the recent increase.", "F-conversion_rate")] })),
+    ).toEqual({ state: "rejected", cats: ["relevance"] });
+  });
+  it("needs a supporting fact for EACH direction a generic sentence mentions", async () => {
+    const both = "The rise and the decline may be related.";
+    expect(await verdict(reply({ i: [I(both, "F-leads")] }))).toEqual({
+      state: "rejected",
+      cats: ["relevance"],
+    });
+    expect((await verdict(reply({ i: [I(both, "F-leads", "F-conversion_rate")] }))).state).toBe(
+      "ok",
+    );
+  });
+  it("does not read a denied, conditional or interrogative mention as a claimed movement", async () => {
+    for (const t of [
+      "There was no decline in the period.",
+      "Is the decline seasonal?",
+      "If the decline continues, escalate.",
+    ]) {
+      expect((await verdict(reply({ i: [I(t, "F-leads")] }))).state, t).toBe("ok");
+    }
+  });
+  it("accepted citations still derive supporting records from the cited facts alone", async () => {
+    const r = await run(
+      reply({ r: [R("Review the sales strategy.", "F-conversion_rate", "F-leads")] }),
+    );
+    expect(r.result.state).toBe("ok");
+    if (r.result.state !== "ok") return;
+    const facts = buildAuthorizedFacts(
+      authorizeDemo({ scenarioId: "baseline", roleId: "exec" }).authorized,
+      PROTOTYPE_RUNTIME.analysis,
+    );
+    const want = ["F-conversion_rate", "F-leads"].flatMap((id) => {
+      const f = facts.find((x) => x.fact_id === id)!;
+      return [f.prior.id, f.current.id];
+    });
+    expect(r.result.output.recommendations[0]!.supporting_ids).toEqual(want);
+  });
+  it("a model cannot supply or widen supporting_ids itself (schema)", () => {
+    const smuggled = {
+      interpretations: [
+        {
+          ...I("Review the sales strategy.", "F-conversion_rate"),
+          supporting_ids: ["VH-FIN-001-Q2"],
+        },
+      ],
+      missing_evidence: [],
+      recommendations: [],
+    };
+    expect(OutputSchema.safeParse(smuggled).success).toBe(false);
+  });
+  it("documented limits stay as they are: wholly generic text may cite any fact, and a role with no related fact is not asked for the impossible", async () => {
+    expect((await verdict(reply({ r: [R("Gather more data.", "F-revenue")] }))).state).toBe("ok");
+    // the finance role has no Sales fact, so a sentence about sales cannot cite a related one (the schema still requires a ref)
+    expect(
+      (
+        await verdict(reply({ r: [R("Review the sales strategy.", "F-revenue")] }), {
+          role: "finance",
+        })
+      ).state,
+    ).toBe("ok");
+  });
+  it("the metric-named rule is unchanged: exact match, coverage, no extras", () => {
+    const facts = buildAuthorizedFacts(
+      authorizeDemo({ scenarioId: "baseline", roleId: "exec" }).authorized,
+      PROTOTYPE_RUNTIME.analysis,
+    );
+    const c = PROTOTYPE_CATALOG;
+    expect(
+      refsConsistent(
+        "Lead volume may relate to conversion rate.",
+        ["F-leads", "F-conversion_rate"],
+        facts,
+        c,
+      ),
+    ).toBe(true);
+    expect(
+      refsConsistent("Lead volume may relate to conversion rate.", ["F-leads"], facts, c),
+    ).toBe(false);
+    expect(
+      refsConsistent(
+        "Lead volume may relate to conversion rate.",
+        ["F-leads", "F-conversion_rate", "F-cac"],
+        facts,
+        c,
+      ),
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------ F5
+const fact = (prior: number, current: number, pct: number | null): VerifiedFact => ({
+  fact_id: "F-leads",
+  metric: "leads",
+  department: "Marketing",
+  unit: "leads",
+  prior: { id: "P", value: prior },
+  current: { id: "C", value: current },
+  change_pct: pct,
+  change_pp: null,
+  direction: pct === null || Math.abs(pct) < 3 ? "flat" : pct > 0 ? "up" : "down",
+});
+const issues = (f: VerifiedFact, text: string, strict = true) => {
+  const scope = genericScope([], [f], PROTOTYPE_CATALOG, {
+    discoverable: ["leads"],
+    strictMentions: strict,
+  });
+  return checkSemantics(text, "interpretation", scope).map((i) => i.code);
+};
+const EQUAL = fact(100, 100, 0);
+const SMALL_UP = fact(100, 101, 1);
+const SMALL_DOWN = fact(100, 99, -1);
+const FROM_ZERO = fact(0, 5, null);
+
+describe("F5: directional claims against a flat finding and the underlying raw values (strict profile)", () => {
+  it("equal values: any up or down claim contradicts, flat wording and negations do not", () => {
+    for (const t of [
+      "Lead volume rose.",
+      "Lead volume fell.",
+      "Lead volume rose slightly.",
+      "Lead volume increased.",
+      "Lead volume rose sharply.",
+    ])
+      expect(issues(EQUAL, t), t).toEqual(["direction"]);
+    for (const t of [
+      "Lead volume was flat.",
+      "Lead volume was unchanged.",
+      "Lead volume did not rise.",
+      "Lead volume did not fall.",
+    ])
+      expect(issues(EQUAL, t), t).toEqual([]);
+  });
+  it("small positive change: a truthful description of the raw movement is accepted; the opposite and forceful language are not", () => {
+    for (const t of [
+      "Lead volume rose.",
+      "Lead volume rose slightly.",
+      "Lead volume grew.",
+      "Lead volume increased modestly.",
+      "Lead volume was flat.",
+    ])
+      expect(issues(SMALL_UP, t), t).toEqual([]);
+    for (const t of ["Lead volume fell.", "Lead volume declined.", "Lead volume dropped slightly."])
+      expect(issues(SMALL_UP, t), t).toEqual(["direction"]);
+    for (const t of [
+      "Lead volume surged.",
+      "Lead volume soared.",
+      "Lead volume jumped.",
+      "Lead volume rose sharply.",
+      "Lead volume grew dramatically.",
+      "Lead volume increased significantly.",
+    ])
+      expect(issues(SMALL_UP, t), t).toEqual(["direction"]);
+  });
+  it("small negative change mirrors it", () => {
+    for (const t of ["Lead volume declined.", "Lead volume dropped slightly.", "Lead volume fell."])
+      expect(issues(SMALL_DOWN, t), t).toEqual([]);
+    for (const t of ["Lead volume rose.", "Lead volume grew slightly."])
+      expect(issues(SMALL_DOWN, t), t).toEqual(["direction"]);
+    for (const t of [
+      "Lead volume plunged.",
+      "Lead volume collapsed.",
+      "Lead volume fell sharply.",
+      "Lead volume dropped substantially.",
+    ])
+      expect(issues(SMALL_DOWN, t), t).toEqual(["direction"]);
+  });
+  it("a zero prior value has no relative size: the flat label says nothing about magnitude, so only equality and sign apply", () => {
+    expect(FROM_ZERO.direction).toBe("flat");
+    for (const t of ["Lead volume rose.", "Lead volume surged.", "Lead volume rose sharply."])
+      expect(issues(FROM_ZERO, t), t).toEqual([]);
+    expect(issues(FROM_ZERO, "Lead volume fell.")).toEqual(["direction"]);
+    expect(issues(fact(0, 0, null), "Lead volume rose.")).toEqual(["direction"]);
+  });
+  it("does not change non-flat findings: matching language stays accepted (including qualitative magnitude, E18) and the opposite stays rejected", () => {
+    const up = fact(100, 150, 50);
+    for (const t of ["Lead volume rose.", "Lead volume surged.", "Lead volume rose sharply."])
+      expect(issues(up, t), t).toEqual([]);
+    expect(issues(up, "Lead volume fell.")).toEqual(["direction"]);
+  });
+  it("the legacy profile and its goldens are untouched: it still tolerates up/down wording on a flat finding", () => {
+    for (const t of ["Lead volume rose.", "Lead volume surged.", "Lead volume fell."])
+      expect(issues(EQUAL, t, false), t).toEqual([]);
+  });
+  it("end to end: a flat, unchanged metric cannot be described as moving, and a truthful flat statement passes", async () => {
+    // "ops-only": lead quality (MQL rate) is 33 -> 33 (flat, equal)
+    const over = { scenario: "ops-only" };
+    expect(await verdict(reply({ i: [I("Lead quality rose.", "F-mql_rate")] }), over)).toEqual({
+      state: "rejected",
+      cats: ["direction"],
+    });
+    expect(
+      await verdict(reply({ i: [I("Lead quality rose sharply.", "F-mql_rate")] }), over),
+    ).toEqual({ state: "rejected", cats: ["direction"] });
+    expect(
+      (await verdict(reply({ i: [I("Lead quality was unchanged.", "F-mql_rate")] }), over)).state,
+    ).toBe("ok");
+  });
+});
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------ F2
+describe("F2: strict reasoning requires an explicit discoverability grant", () => {
+  const undeclared: AccessPolicy<PrototypeEvidence> = {
+    evidenceScope: (ctx) => {
+      const b = demoAccessPolicy.evidenceScope(ctx);
+      return { tenantId: b.tenantId, permits: b.permits };
+    },
+  };
+  const declared = (grant: string[]): AccessPolicy<PrototypeEvidence> => ({
+    evidenceScope: (ctx) => {
+      const b = demoAccessPolicy.evidenceScope(ctx);
+      return { tenantId: b.tenantId, permits: b.permits, discoverableMetrics: grant };
+    },
+  });
+  it("authorization reports whether the grant was declared: absent is not the same as empty", () => {
+    const call = (policy: AccessPolicy<PrototypeEvidence>) => {
+      const ctx = demoIdentity.authenticateSync({
+        kind: "simulated-demo-role-claim",
+        roleId: "marketing",
+      });
+      return authorizeEvidence(demoIdentity, ctx, policy, []);
+    };
+    expect(call(undeclared)).toMatchObject({ discoverableMetrics: [], grantDeclared: false });
+    expect(call(declared([]))).toMatchObject({ discoverableMetrics: [], grantDeclared: true });
+    expect(call(declared(["cac"]))).toMatchObject({
+      discoverableMetrics: ["cac"],
+      grantDeclared: true,
+    });
+    expect(call(demoAccessPolicy).grantDeclared).toBe(true);
+    expect(() => call(declared([""]))).toThrow(AuthorizationError); // a malformed declaration still fails closed
+  });
+  it("the strict run refuses a policy that never declared a grant: nothing is sent and the model is not called", async () => {
+    const r = await run(reply({}), { role: "marketing", policy: undeclared });
+    expect(r.result).toMatchObject({
+      state: "blocked",
+      requestSent: false,
+      reason: "Engine configuration error; nothing sent.",
+    });
+    expect(r.provider.calls).toBe(0);
+  });
+  it("an explicit EMPTY grant is a valid declaration and runs", async () => {
+    const r = await run(reply({}), { role: "marketing", policy: declared([]) });
+    expect(r.result.state).toBe("ok");
+    expect(r.provider.calls).toBe(1);
+  });
+  it("the validator and the scoped prompt need an array grant: a missing one throws instead of defaulting", () => {
+    const a = authorizeDemo({ scenarioId: "baseline", roleId: "marketing" });
+    expect(() =>
+      validateStrictOutput(
+        reply({}),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+        undefined as never,
+      ),
+    ).toThrow(TypeError);
+    expect(() =>
+      validateStrictOutput(
+        reply({}),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+        "cac" as never,
+      ),
+    ).toThrow(TypeError);
+    expect(() =>
+      buildScopedMessages("", a.authorized, PROTOTYPE_RUNTIME.analysis, undefined as never),
+    ).toThrow(TypeError);
+    expect(
+      validateStrictOutput(
+        reply({}),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+        a.discoverableMetrics,
+      ).ok,
+    ).toBe(true);
+  });
+  it("the prototype facade infers a department-derived grant only for the legacy scope; a strict scope must be given one", () => {
+    const a = authorizeDemo({ scenarioId: "baseline", roleId: "marketing" });
+    const facts = buildAuthorizedFacts(a.authorized, PROTOTYPE_RUNTIME.analysis);
+    expect(() =>
+      facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, { strictMentions: true }),
+    ).toThrow(TypeError);
+    expect(() =>
+      facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, { strictMentions: "true" as never }),
+    ).toThrow(TypeError);
+    // legacy (unset or false) keeps the department-derived default, so the goldens and legacy callers are unchanged
+    expect(facadeScope(a.authorized, facts, PROTOTYPE_CATALOG).discoverable?.has("mql_rate")).toBe(
+      true,
+    );
+    expect(
+      facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, {
+        strictMentions: false,
+      }).discoverable?.has("mql_rate"),
+    ).toBe(true);
+  });
+  it("record departments never widen a strict grant: Marketing records are present, yet an ungranted Marketing metric stays hidden", async () => {
+    const leadsOnly = (grant: string[]): AccessPolicy<PrototypeEvidence> => ({
+      evidenceScope: (ctx) => {
+        const b = demoAccessPolicy.evidenceScope(ctx);
+        return {
+          tenantId: b.tenantId,
+          permits: (e) => b.permits(e) && e.metric === "leads",
+          discoverableMetrics: grant,
+        };
+      },
+    });
+    const gap = reply({ g: ["Lead quality scores by source."] });
+    expect(await verdict(gap, { role: "marketing", policy: leadsOnly([]) })).toEqual({
+      state: "rejected",
+      cats: ["domain"],
+    });
+    expect((await verdict(gap, { role: "marketing", policy: leadsOnly(["mql_rate"]) })).state).toBe(
+      "ok",
+    );
+    // and a granted name opens exactly that name, not its department
+    expect(
+      (
+        await verdict(reply({ g: ["Closed deals by source."] }), {
+          role: "marketing",
+          policy: leadsOnly(["mql_rate"]),
+        })
+      ).cats,
+    ).toEqual(["domain"]);
+  });
+  it("existing authorization boundaries hold: records outside the role stay withheld and unreferenceable", async () => {
+    const r = await verdict(reply({ i: [I("Lead volume may matter.", "F-revenue")] }), {
+      role: "marketing",
+    });
+    expect(r).toEqual({ state: "rejected", cats: ["ref"] });
+  });
+});
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------ E17 / E18
+describe("E17/E18: undecided policies are characterized, not changed", () => {
+  it("E17: an all-empty structured output is accepted by the validator today (schema permits empty lanes); it scores as the weakest reasoning, and is never a security rejection", async () => {
+    expect(await verdict(reply({}))).toEqual({ state: "ok", cats: [] });
+    const empty = { interpretations: [], missing_evidence: [], recommendations: [] };
+    expect(OutputSchema.safeParse(empty).success).toBe(true);
+    expect(evaluateReasoning(empty, ["F-leads", "F-cac", "F-conversion_rate"])).toMatchObject({
+      total: 0,
+      verdict: "weak",
+    });
+    // each lane is independently allowed to be empty
+    expect((await verdict(reply({ g: ["Lead counts and conversion by source."] }))).state).toBe(
+      "ok",
+    );
+  });
+  it("E18: qualitative magnitude on a NON-flat finding is accepted today ('rose sharply'), while numeric and quantified magnitude stay rejected", async () => {
+    for (const t of [
+      "Lead volume rose sharply.",
+      "Lead volume rose dramatically.",
+      "Conversion fell steeply.",
+    ]) {
+      const ref = t.startsWith("Lead") ? "F-leads" : "F-conversion_rate";
+      expect((await verdict(reply({ i: [I(t, ref)] }))).state, t).toBe("ok");
+    }
+    for (const t of [
+      "Lead volume rose by forty percent.",
+      "Lead volume doubled.",
+      "Lead volume rose by a third.",
+    ]) {
+      expect((await verdict(reply({ i: [I(t, "F-leads")] }))).cats, t).toContain("magnitude");
+    }
+  });
+  it("E18 is not a loophole for flat findings: the same qualitative language is rejected there (F5), which is the only policy change", () => {
+    expect(issues(SMALL_UP, "Lead volume rose sharply.")).toEqual(["direction"]);
+    expect(issues(fact(100, 150, 50), "Lead volume rose sharply.")).toEqual([]);
+  });
+  it("the G4.5 reasoning score stays a non-gating metric: a weak reply that the validator accepts is still accepted", async () => {
+    const weak = reply({
+      i: [I("Lead volume may co-move with conversion patterns.", "F-leads", "F-conversion_rate")],
+    });
+    expect((await verdict(weak)).state).toBe("ok");
+  });
+});

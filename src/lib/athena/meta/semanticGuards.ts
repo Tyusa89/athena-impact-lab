@@ -17,5 +17,9 @@ export const prototypeDiscoverable = (authorized: readonly EvidenceLike[], catal
   const held = new Set(authorized.map((r) => r.department));
   return catalog.metrics.filter((m) => held.has(m.domain)).map((m) => m.key);
 };
-export const semanticScope = (authorized: readonly EvidenceLike[], facts: readonly VerifiedFact[], catalog: Catalog = PROTOTYPE_CATALOG, opts: s.SemanticScopeOptions = {}) =>
-  s.semanticScope(authorized, facts, catalog, { ...opts, discoverable: opts.discoverable ?? prototypeDiscoverable(authorized, catalog) });
+export const semanticScope = (authorized: readonly EvidenceLike[], facts: readonly VerifiedFact[], catalog: Catalog = PROTOTYPE_CATALOG, opts: s.SemanticScopeOptions = {}) => {
+  // F2: only the LEGACY (non-strict) scope may fall back to the department-derived grant. A strict scope (anything but `undefined`/`false` for `strictMentions`, as `isStrictMentions` reads it)
+  // needs the policy's explicit grant; inferring it from which departments' records happen to be present would let record presence widen what the model may name.
+  if (opts.discoverable === undefined && s.isStrictMentions(opts.strictMentions)) throw new TypeError("A strict semantic scope requires an explicit discoverable grant");
+  return s.semanticScope(authorized, facts, catalog, { ...opts, discoverable: opts.discoverable ?? prototypeDiscoverable(authorized, catalog) });
+};

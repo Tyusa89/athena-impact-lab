@@ -190,7 +190,10 @@ const OFF_PERIOD = /\b(?:in|during|over|around|before|after|every|each)\s+(?:the
 const IDIOM_TAIL = /^(?:short|behind|through|apart|victim|prey|foul|into|under|flat|to the occasion|out of (?:favou?r|line|step))\b/;
 const MONITOR_LEAD = /^(?:please\s+)?(?:watch|monitor|track|check|verify|confirm|test|see|flag|alert|look for|keep an eye on|stay alert|be alert|prepare for|plan for|anticipate|expect|guard against|brace for|find out)\b/;
 
-interface Claim { entities: Entity[]; dir: Dir; negated: boolean; word: string; forward: boolean }
+/** `strong`: the claim uses forceful movement language (a strong verb such as "surged"/"plunged", or an intensifier such as "sharply" next to the direction word). Used only against FLAT findings (F5). */
+interface Claim { entities: Entity[]; dir: Dir; negated: boolean; word: string; forward: boolean; strong: boolean }
+const STRONG_WORDS = new Set(["surged", "surges", "soared", "soars", "jumped", "jumps", "spiked", "spikes", "plunged", "plunges", "tumbled", "collapsed", "surging", "soaring", "jumping", "plunging", "surge", "spike", "jump"]);
+const INTENSIFIER = /\b(?:sharply|sharp|dramatically|dramatic|significantly|significant|substantially|substantial|steeply|steep|markedly|massively|massive|considerably|considerable|strongly|rapidly|drastically|drastic|enormously|hugely|exponentially|aggressively)\b/;
 interface ClauseInfo { text: string; conditional: boolean; monitor: boolean }
 
 function clausesOf(text: string): ClauseInfo[] {
@@ -316,13 +319,14 @@ export function directionalClaims(text: string, lane: Lane, catalog: Catalog): C
       const chain = side === "left" ? chainLeft(es, subject, c.text) : [es[subject]!];
       const negated = auxNeg || NEGATOR.test(c.text.slice(Math.max(0, start - 28), start)) || (side === "right" && NEGATOR.test(c.text.slice(Math.max(0, start - 14), start)));
       const forward = !interp && c.monitor; // monitoring directives talk about what may happen next (S7)
+      const strong = STRONG_WORDS.has(word) || INTENSIFIER.test(c.text.slice(Math.max(0, start - 24), end + 24));
       // valence words resolve per metric; departments have no polarity, so a valence word only counts as an assumed direction for the domain check
-      if (w.dir) claims.push({ entities: chain, dir: w.dir, negated, word, forward });
+      if (w.dir) claims.push({ entities: chain, dir: w.dir, negated, word, forward, strong });
       else for (const e of chain) {
-        if (e.kind !== "metric") { claims.push({ entities: [e], dir: w.val === "good" ? "up" : "down", negated, word, forward }); continue; }
+        if (e.kind !== "metric") { claims.push({ entities: [e], dir: w.val === "good" ? "up" : "down", negated, word, forward, strong }); continue; }
         const good: Dir = goodDirection(catalog, e.key);
         const bad: Dir = good === "up" ? "down" : "up";
-        claims.push({ entities: [e], dir: w.val === "good" ? good : bad, negated, word, forward });
+        claims.push({ entities: [e], dir: w.val === "good" ? good : bad, negated, word, forward, strong });
       }
     }
   }
@@ -445,6 +449,7 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
       else if (e.kind === "metric") {
         const f = byMetric.get(e.key);
         if (!f) push({ code: "unavailable", message: `Semantic guard (unavailable data): ${where} makes a directional claim about a metric for which no verified data is available in this scenario` });
+        else if (strict && !claim.forward && f.direction === "flat" && flatContradiction(claim, f)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is flat` });
         else if (!claim.forward && contradicts(claim, f.direction)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is ${f.direction}` });
       }
     }
@@ -466,6 +471,20 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
     }
   }
   return issues;
+}
+
+/** F5 (STRICT profile only; the legacy guard and its goldens are unchanged): a directional claim about a metric whose verified finding is FLAT, judged against the finding AND the underlying raw values. A flat finding means the relative change is under the catalog's threshold; it does
+ * not mean nothing moved, so a truthful description of a small raw movement ("edged up" when the value rose slightly) is not a contradiction. Rejected, as clear contradictions:
+ *   - any up/down claim when the two raw values are equal (nothing moved);
+ *   - a claim whose direction is opposite to the raw movement (said "fell", the value rose slightly);
+ *   - forceful movement language ("surged", "plunged", "rose sharply") against a flat finding, because a change under the flat threshold is not a strong move.
+ * When the prior value is zero the relative change is undefined (the engine labels it flat), so the flat label says nothing about size and only the equality and sign rules apply. Negated and flat-worded claims are not checked here. */
+function flatContradiction(c: Claim, f: VerifiedFact): boolean {
+  if (c.negated || c.dir === "flat") return false;
+  const raw = f.current.value - f.prior.value;
+  if (raw === 0) return true;
+  if ((c.dir === "up") !== (raw > 0)) return true;
+  return c.strong && f.change_pct !== null;
 }
 
 /** A claim contradicts a verified direction when it states the opposite (flat facts tolerate small up/down wording). */

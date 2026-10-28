@@ -58,8 +58,8 @@ const reply = (o: { i?: object[]; g?: string[]; r?: object[] }) =>
     recommendations: o.r ?? [],
   });
 
-/** The policy the G4.1 runner used: records limited to the three metrics, but the policy's discovery grant DROPPED. Test-only reconstruction of the defect. */
-const g41Policy = (): AccessPolicy<PrototypeEvidence> => ({
+/** The policy the G4.1 runner used: records limited to the three metrics, but the policy's discovery grant DROPPED (undeclared). Test-only reconstruction of the defect. Since G4.6 the strict path refuses it. */
+const droppedGrantPolicy = (): AccessPolicy<PrototypeEvidence> => ({
   evidenceScope: (ctx) => {
     const base = demoAccessPolicy.evidenceScope(ctx);
     return {
@@ -67,6 +67,10 @@ const g41Policy = (): AccessPolicy<PrototypeEvidence> => ({
       permits: (e) => base.permits(e) && (TEST_METRICS as readonly string[]).includes(e.metric),
     };
   },
+});
+/** The same scope with an EXPLICIT empty grant: the role may discover only the metrics that have data. This is how the G4.3 `domain` rejection is still reproduced. */
+const emptyGrantPolicy = (): AccessPolicy<PrototypeEvidence> => ({
+  evidenceScope: (ctx) => ({ ...droppedGrantPolicy().evidenceScope(ctx), discoverableMetrics: [] }),
 });
 async function strict(content: string, policy: AccessPolicy<PrototypeEvidence> = testPolicy()) {
   const cats: DiagnosticCategory[] = [];
@@ -132,16 +136,21 @@ const G43_REPLY = JSON.stringify({
 });
 
 describe("G4.3 rejection mechanism (exact reproduction)", () => {
-  it("with the G4.1 runner scope the reply is rejected as `domain`, and only because of 'lead quality'", async () => {
-    expect(await outcomeOf(G43_REPLY, g41Policy())).toEqual({
+  it("the G4.1 defect (a dropped, undeclared grant) is now refused outright by the strict path (G4.6 F2), with nothing sent", async () => {
+    const { r, seen } = await strict(G43_REPLY, droppedGrantPolicy());
+    expect(r.state).toBe("blocked");
+    expect(seen).toHaveLength(0);
+  });
+  it("with an explicit EMPTY grant the reply is rejected as `domain`, and only because of 'lead quality'", async () => {
+    expect(await outcomeOf(G43_REPLY, emptyGrantPolicy())).toEqual({
       state: "rejected",
       cats: ["domain"],
     });
     const swapped = G43_REPLY.replace("lead quality criteria", "lead criteria");
-    expect((await outcomeOf(swapped, g41Policy())).cats).not.toContain("domain");
+    expect((await outcomeOf(swapped, emptyGrantPolicy())).cats).not.toContain("domain");
   });
-  it("the cause is the dropped discovery grant: the prompt then lists no unavailable metric, so 'lead quality' is an unauthorized metric", async () => {
-    const { seen } = await strict(G43_REPLY, g41Policy());
+  it("the cause is the missing discovery grant: with an empty grant the prompt lists no unavailable metric, so 'lead quality' is an unauthorized metric", async () => {
+    const { seen } = await strict(G43_REPLY, emptyGrantPolicy());
     expect(JSON.stringify(seen[0]!.messages)).toContain("UNAVAILABLE_METRICS (JSON): []");
   });
   it("with the corrected runner scope the same reply passes validation (it is only weak, see the quality tests)", async () => {
@@ -255,9 +264,9 @@ describe("vocabulary boundary: authorized, discoverable-unavailable and unauthor
       expect((await outcomeOf(reply({ r: [rec(t)] }))).cats, t).toContain("domain");
     }
   });
-  it("a role WITHOUT the grant still gets the strict outcome: the grant is the only thing that opens 'lead quality'", async () => {
+  it("a role with an empty grant still gets the strict outcome: the grant is the only thing that opens 'lead quality'", async () => {
     expect(
-      (await outcomeOf(reply({ g: ["Lead quality scores by source."] }), g41Policy())).cats,
+      (await outcomeOf(reply({ g: ["Lead quality scores by source."] }), emptyGrantPolicy())).cats,
     ).toEqual(["domain"]);
     expect((await outcomeOf(reply({ g: ["Lead quality scores by source."] }))).state).toBe("ok");
   });

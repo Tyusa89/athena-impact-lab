@@ -32,7 +32,7 @@ const fake = (outcome: ModelOutcome | (() => never)): Fake => {
 const completion = (content: string | null, extra: Partial<Extract<ModelOutcome, { kind: "completion" }>> = {}): ModelOutcome => ({ kind: "completion", content, truncated: false, usage: { max_tokens_sent: 2000, completion_tokens: 50 }, ...extra });
 /** The marketing demo role with a METRIC-level policy: records only for `dataMetrics`, an optional explicit grant. */
 const policy = (dataMetrics: string[], grant?: string[]): AccessPolicy<PrototypeEvidence> => ({
-  evidenceScope: (ctx) => { const b = demoAccessPolicy.evidenceScope(ctx); return { tenantId: b.tenantId, permits: (e) => b.permits(e) && dataMetrics.includes(e.metric), ...(grant ? { discoverableMetrics: grant } : {}) }; },
+  evidenceScope: (ctx) => { const b = demoAccessPolicy.evidenceScope(ctx); return { tenantId: b.tenantId, permits: (e) => b.permits(e) && dataMetrics.includes(e.metric), discoverableMetrics: grant ?? [] }; },
 });
 const LEADS_ONLY = policy(["leads"]);
 interface Run { result: Awaited<ReturnType<typeof runStrictAnalysis>>; provider: Fake; diag: DiagnosticCategory[][] }

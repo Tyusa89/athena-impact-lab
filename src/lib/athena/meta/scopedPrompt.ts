@@ -83,6 +83,7 @@ export function buildScopedMessages<E extends Evidence>(question: unknown, autho
   assertAuthorized(authorized);
   assertCatalog(ctx.catalog);
   if (!SUBJECT_RE.test(subject)) throw new Error("Invalid prompt subject");
+  if (!Array.isArray(discoverableMetrics) || !discoverableMetrics.every((k) => typeof k === "string")) throw new TypeError("The scoped prompt requires an explicit discoverable-metrics grant"); // F2
   const facts = buildAuthorizedFacts(authorized, ctx);
   const discoverable = scopedDiscoverable(facts, discoverableMetrics, ctx);
   const have = new Set(facts.map((f) => f.metric));

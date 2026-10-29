@@ -30,7 +30,9 @@ export async function runStrictAnalysis(input: unknown, env: ProviderEnv, fetchI
   if (notReady) return { state: "blocked", reason: describeBlock(notReady, label), requestSent: false };
   const prep = await authorizeRequest(input, runtime);
   if (!prep.ok) return { state: "blocked", reason: prep.reason, requestSent: false };
-  const { records, withheld, question, discoverableMetrics } = prep;
+  const { records, withheld, question, discoverableMetrics, grantDeclared } = prep;
+  // F2: the strict path never infers what the model may name. The policy must have DECLARED its metric-discovery grant (an empty declaration is allowed); an absent one is refused before anything is sent.
+  if (!grantDeclared) return { state: "blocked", reason: "Engine configuration error; nothing sent.", requestSent: false };
   let messages;
   try {
     messages = buildScopedMessages(question, records, runtime.analysis, discoverableMetrics, runtime.promptSubject ?? DEFAULT_PROMPT_SUBJECT);

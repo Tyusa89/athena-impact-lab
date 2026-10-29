@@ -198,12 +198,15 @@ describe("5-7. generic statements and multi-metric recommendations", () => {
       true,
     );
   });
-  it("department vocabulary alone never constrains citations (generic business language stays acceptable, and a department match is not treated as verification)", () => {
+  it("department vocabulary constrains citations only when a related fact exists (C11): a related fact is accepted, an unrelated one is rejected, and a department match is still not treated as verification", () => {
     expect(ok(strict(EXEC, "r", "Review the sales strategy.", ["F-conversion_rate"]))).toBe(true);
-    expect(ok(strict(EXEC, "r", "Review the sales strategy.", ["F-revenue"]))).toBe(true);
     expect(ok(strict(EXEC, "r", "Marketing and sales should communicate.", ["F-leads"]))).toBe(
       true,
     );
+    expect(ok(strict(EXEC, "r", "Review the sales strategy.", ["F-revenue"]))).toBe(false);
+    expect(diag(strict(EXEC, "r", "Review the sales strategy.", ["F-revenue"]))).toEqual([
+      "relevance",
+    ]);
   });
 });
 

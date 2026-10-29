@@ -75,7 +75,7 @@ export type ResolvedRequest =
 
 /** Everything up to (but not including) building a prompt: resolve the request, validate the untrusted question, authenticate, authorize, and require full fact coverage.
  * Shared by the model path (`runAnalysis`) and the deterministic path (`runImpactAnalysis`); either way nothing proceeds without authorized evidence. */
-export type Prepared<E extends Evidence = Evidence> = { ok: true; records: AuthorizedEvidence<E>; withheld: readonly E[]; question: string; discoverableMetrics: readonly string[] } | { ok: false; reason: string };
+export type Prepared<E extends Evidence = Evidence> = { ok: true; records: AuthorizedEvidence<E>; withheld: readonly E[]; question: string; discoverableMetrics: readonly string[]; grantDeclared: boolean } | { ok: false; reason: string };
 export async function authorizeRequest(input: unknown, runtime: Pick<EngineRuntime, "resolve" | "identity" | "allowSimulatedIdentity" | "store" | "policy" | "analysis" | "question">): Promise<Prepared> {
   const req = runtime.resolve(input);
   if (!req.ok) return { ok: false, reason: req.reason };
@@ -88,11 +88,11 @@ export async function authorizeRequest(input: unknown, runtime: Pick<EngineRunti
   }
 
   // Authorization BEFORE anything else touches the evidence. Tenant isolation is enforced inside authorizeEvidence, not by the store or policy.
-  let records, withheld, discoverableMetrics;
+  let records, withheld, discoverableMetrics, grantDeclared;
   try {
     const ctx = await runtime.identity.authenticate(req.credential); // fails closed if verification is unavailable, malformed or slow
     if (ctx.assurance === "simulated" && !runtime.allowSimulatedIdentity) throw new AuthorizationError();
-    ({ authorized: records, withheld, discoverableMetrics } = authorizeEvidence(runtime.identity, ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
+    ({ authorized: records, withheld, discoverableMetrics, grantDeclared } = authorizeEvidence(runtime.identity, ctx, runtime.policy, runtime.store.candidates(ctx, req.dataset)));
   } catch (e) {
     if (!(e instanceof AuthorizationError)) console.error("Evidence store error"); // category only: never the message, ids or labels
     return { ok: false, reason: "Authorization failed; nothing sent." };
@@ -100,7 +100,7 @@ export async function authorizeRequest(input: unknown, runtime: Pick<EngineRunti
   if (records.length === 0) return { ok: false, reason: "No records in authorized workspaces; nothing to send." };
   const unfit = authorizedFactsBlockReason(records, runtime.analysis); // the runtime's own catalog and periods, not the prototype's
   if (unfit) return { ok: false, reason: unfit };
-  return { ok: true, records, withheld, question, discoverableMetrics };
+  return { ok: true, records, withheld, question, discoverableMetrics, grantDeclared };
 }
 
 export async function runAnalysis(input: unknown, env: ProviderEnv, fetchImpl: typeof fetch, runtime: EngineRuntime): Promise<MetaResult> {

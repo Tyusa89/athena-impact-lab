@@ -62,7 +62,7 @@ const demoMetricPolicy = (
     return {
       tenantId: b.tenantId,
       permits: (e) => b.permits(e) && metrics.includes(e.metric),
-      ...(grant ? { discoverableMetrics: grant } : {}),
+      discoverableMetrics: grant ?? [], // F2: the strict path requires a DECLARED grant; no grant means a declared empty one
     };
   },
 });

@@ -160,6 +160,7 @@ const deskWorld = (name: string, domains: string[]): World => {
     evidenceScope: (c) => ({
       tenantId: c.tenantId,
       permits: (e) => domains.includes(e.department),
+      discoverableMetrics: [], // F2: the strict path requires a declared grant; this world grants nothing beyond its data
     }),
   };
   const verifier: IdentityVerifier = {
@@ -768,21 +769,19 @@ const FIXTURES: Fixture[] = [
   },
   {
     id: "C11",
-    desc: "KNOWN LIMIT: generic recommendation cites an unrelated fact",
-    cls: "limitation",
+    desc: "generic recommendation cites an unrelated fact (G4.6: rejected)",
+    cls: "security",
     world: "exec",
     reply: rec("Review the sales strategy.", "F-revenue"),
-    expect: "ok",
-    desired: "reject",
+    expect: ["relevance"],
   },
   {
     id: "C12",
-    desc: "KNOWN LIMIT: generic hypothesis cites an unrelated fact",
-    cls: "limitation",
+    desc: "generic hypothesis about a decline cites a fact that did not decline (G4.6: rejected)",
+    cls: "security",
     world: "exec",
     reply: interp("The decline may reflect seasonal demand.", "F-leads"),
-    expect: "ok",
-    desired: "reject",
+    expect: ["relevance"],
   },
 
   // ---- D. causal integrity
@@ -819,7 +818,7 @@ const FIXTURES: Fixture[] = [
     cls: "security",
     world: "exec",
     reply: interp("It may be noted that marketing definitively caused the decline.", "F-revenue"),
-    expect: ["causal"],
+    expect: ["causal", "relevance"], // G4.6: the cited Finance fact is also unrelated to a sentence about marketing
     causal: true,
   },
   {

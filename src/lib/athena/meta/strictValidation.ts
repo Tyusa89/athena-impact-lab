@@ -35,6 +35,8 @@ export type StrictValidation =
  * option to relax strictness: the profile is fixed here.
  */
 export function validateStrictOutput<E extends Evidence>(raw: string, authorized: AuthorizedEvidence<E>, withheld: readonly E[], ctx: AnalysisContext, discoverableMetrics: readonly string[]): StrictValidation {
+  // F2: an explicit grant is structurally required. A JS caller (or a cast) that omits it must fail loudly, never fall back to a grant inferred from the records' departments or their metrics.
+  if (!Array.isArray(discoverableMetrics) || !discoverableMetrics.every((k) => typeof k === "string")) throw new TypeError("Strict validation requires an explicit discoverable-metrics grant");
   const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true, generalVocabulary: true }, { exemptRecordIds: false, leakScope: "all", refConsistency: true, strictCausal: true });
   return v.ok ? { ok: true, output: v.output, findings: v.findings } : { ok: false, diagnostics: toDiagnostics(v.categories) };
 }

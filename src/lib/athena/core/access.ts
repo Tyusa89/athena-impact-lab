@@ -47,6 +47,9 @@ export interface AuthorizationResult<E extends Evidence = Evidence> {
   readonly withheld: readonly E[];
   /** A frozen copy of the scope's `discoverableMetrics` (empty if it declared none). */
   readonly discoverableMetrics: readonly string[];
+  /** True only when the scope DECLARED `discoverableMetrics` (an empty array is a declaration; an absent field is not). The strict path requires a declaration, so a policy that silently
+   * drops its grant (the G4.3 runner defect) is refused instead of quietly shrinking what the model may name. The legacy path ignores it. */
+  readonly grantDeclared: boolean;
 }
 
 const authorizedSets = new WeakSet<object>();
@@ -83,11 +86,13 @@ export function authorizeEvidence<E extends Evidence>(identity: IdentityBoundary
   const kept: E[] = [];
   const withheld: E[] = [];
   let discoverableMetrics: readonly string[] = [];
+  let grantDeclared = false;
   try {
     const d = scope.discoverableMetrics; // read once; a malformed declaration fails closed rather than widening or silently dropping scope
     if (d !== undefined) {
       if (!Array.isArray(d) || !d.every(nonEmpty)) throw new AuthorizationError();
       discoverableMetrics = Object.freeze([...new Set<string>(d)]);
+      grantDeclared = true;
     }
     for (const c of candidates) {
       if (wellFormed(c) && c.tenantId === ctx.tenantId && scope.permits(c) === true) kept.push(Object.freeze({ ...c }));
@@ -98,5 +103,5 @@ export function authorizeEvidence<E extends Evidence>(identity: IdentityBoundary
   }
   const authorized = Object.freeze(Object.assign(kept, { tenantId: ctx.tenantId })) as unknown as AuthorizedEvidence<E>;
   authorizedSets.add(authorized);
-  return Object.freeze({ authorized, withheld: Object.freeze(withheld), discoverableMetrics });
+  return Object.freeze({ authorized, withheld: Object.freeze(withheld), discoverableMetrics, grantDeclared });
 }

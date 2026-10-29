@@ -4,6 +4,7 @@
 // What changes relative to the legacy gate, for model text produced from the SCOPED prompt (which contains no user text and no record identifiers):
 //   * strict mentions in all three lanes: any reference to a metric or department the caller may not discover is rejected, directional or not, in this department or another;
 //   * no record id is exempt from the numeral rule, and any record id or source label (authorized or not) in model text is a leak: the model was never shown one;
+//   * an all-empty response (every lane empty) is rejected (G4.7 E17): a strict response must contain at least one reasoning entry;
 //   * every rejection, whatever the reason, is ONE fixed public response. The reason is kept as a CLOSED category code for server diagnostics only (never text, ids or labels).
 // Because the public response is identical for every failure, a rejection cannot tell a caller which rule fired, nor whether a hidden metric, department, record id or source
 // label was involved. What remains observable is accept versus reject, which is why the scoped prompt (H2.1) matters: the caller cannot steer the model to a hidden term.
@@ -16,7 +17,7 @@ import type { VerifiedFinding } from "./render";
 /** The only public wording for a rejected model output. */
 export const STRICT_REJECTION_REASON = "The model output did not pass validation and was not used.";
 /** The closed set of server-side diagnostic categories. Anything else is reported as "unknown". */
-export const DIAGNOSTIC_CATEGORIES = ["json", "legacy", "schema", "leak", "ref", "relevance", "unsafe", "causal", "numeral", "magnitude", "direction", "domain", "unavailable", "provider", "unknown"] as const;
+export const DIAGNOSTIC_CATEGORIES = ["json", "legacy", "schema", "leak", "ref", "relevance", "unsafe", "causal", "numeral", "magnitude", "direction", "domain", "unavailable", "provider", "empty", "unknown"] as const;
 export type DiagnosticCategory = (typeof DIAGNOSTIC_CATEGORIES)[number];
 const CLOSED = new Set<string>(DIAGNOSTIC_CATEGORIES);
 export const toDiagnostics = (cats: readonly unknown[]): DiagnosticCategory[] => [...new Set(cats.map((c) => (typeof c === "string" && CLOSED.has(c) ? (c as DiagnosticCategory) : "unknown")))];
@@ -38,5 +39,9 @@ export function validateStrictOutput<E extends Evidence>(raw: string, authorized
   // F2: an explicit grant is structurally required. A JS caller (or a cast) that omits it must fail loudly, never fall back to a grant inferred from the records' departments or their metrics.
   if (!Array.isArray(discoverableMetrics) || !discoverableMetrics.every((k) => typeof k === "string")) throw new TypeError("Strict validation requires an explicit discoverable-metrics grant");
   const v = validateAuthorizedOutput(raw, authorized, withheld, ctx, { discoverable: discoverableMetrics, strictMentions: true, generalVocabulary: true }, { exemptRecordIds: false, leakScope: "all", refConsistency: true, strictCausal: true });
-  return v.ok ? { ok: true, output: v.output, findings: v.findings } : { ok: false, diagnostics: toDiagnostics(v.categories) };
+  if (!v.ok) return { ok: false, diagnostics: toDiagnostics(v.categories) };
+  // G4.7 E17: a strict response that says nothing — every lane empty — is rejected. The schema still permits empty lanes (legacy behavior is unchanged: the legacy
+  // validator has no such rule), and any single reasoning entry in any lane passes this check; every other rule still applies to what is present.
+  if (!v.output.interpretations.length && !v.output.missing_evidence.length && !v.output.recommendations.length) return { ok: false, diagnostics: ["empty"] };
+  return { ok: true, output: v.output, findings: v.findings };
 }

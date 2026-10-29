@@ -84,7 +84,7 @@ them, and no request field can select, disable or weaken them: the profile is fi
 
 **The defect (G1).** The validator checked that every cited fact id is a known, authorized fact, and `supporting_ids` are derived from the cited facts. It never compared a sentence with the facts it cites, so "Lead volume increased." citing the revenue fact was accepted and carried Finance record ids as supporting evidence. This was an evidence-integrity problem, not an authorization bypass.
 
-**The rule, in one sentence.** For statements naming one or more available metrics, the cited fact metrics must exactly match those named metrics. Statements naming no available metric retain generic citation behavior.
+**The rule, in one sentence.** For statements naming one or more available metrics, the cited fact metrics must exactly match those named metrics. Statements naming no available metric retain generic citation behavior, except that since G4.7 a generic sentence with no hook (no department, no movement reference, no causal topic) is rejected instead of accepted.
 
 **Detail** (`meta/refConsistency.ts`, run from `validateOutput` only when the server-side `ValidateProfile.refConsistency` is exactly `true`; `validateStrictOutput` is the only setter). For each interpretation and recommendation: every metric the text names that has a verified fact must be cited, and every cited fact must be a named metric (no unrelated extras). Statements naming no available metric are generic. The matcher is the strict vocabulary matcher (`strictEntities`), so inflections count. A failure is rejected with the one fixed public response; the internal diagnostic category is `relevance`. Citations are never rewritten, added or removed, and `supporting_ids` stay derived from the cited facts alone.
 
@@ -92,9 +92,9 @@ them, and no request field can select, disable or weaken them: the profile is fi
 
 **What it does not guarantee.**
 - It is mention-level consistency, not semantic proof. A cited fact that passes has not been shown to support the claim, and nothing checks that the claim is true (interpretations stay `verified: false`).
-- A sentence that names no available metric is generic and may cite any authorized fact (an unverified hypothesis, "Review the sales strategy."). Department vocabulary does not constrain citations: that would reject the generic language H2.3 accepts, and a department match would only look like verification.
+- A sentence that names no available metric is generic. A hooked generic sentence (a department, a movement reference, or a causal topic, e.g. an unverified hypothesis, "Review the sales strategy.") may cite facts that pass the department/direction rules; an unanchored one is rejected (G4.7). Department vocabulary does not constrain citations beyond that: that would reject the generic language H2.3 accepts, and a department match would only look like verification.
 - Ordinary words that equal a catalog alias count as mentions: "Lead the review of the plan." is read as the leads metric and is rejected unless the leads fact is cited. This fails closed and is the known false-rejection case.
-- Neither over-citing nor under-citing is allowed for a sentence that names an available metric; a fact the model wants to cite as context must be named in the sentence. Generic sentences may cite any authorized fact (so an unrelated fact can still be attached to a generic sentence).
+- Neither over-citing nor under-citing is allowed for a sentence that names an available metric; a fact the model wants to cite as context must be named in the sentence. Hooked generic sentences may cite facts that pass the department/direction rules; unanchored generic sentences are rejected, so an unrelated fact can no longer be attached to content-free text (G4.7).
 - It does not prove truthfulness or causality, and is not full semantic evidence verification.
 - Causal wording ("because", "due to", "driven by") is a separate gap (G2) and is not addressed here.
 - The missing-evidence lane has no references and is unchanged.

@@ -190,10 +190,29 @@ const OFF_PERIOD = /\b(?:in|during|over|around|before|after|every|each)\s+(?:the
 const IDIOM_TAIL = /^(?:short|behind|through|apart|victim|prey|foul|into|under|flat|to the occasion|out of (?:favou?r|line|step))\b/;
 const MONITOR_LEAD = /^(?:please\s+)?(?:watch|monitor|track|check|verify|confirm|test|see|flag|alert|look for|keep an eye on|stay alert|be alert|prepare for|plan for|anticipate|expect|guard against|brace for|find out)\b/;
 
-/** `strong`: the claim uses forceful movement language (a strong verb such as "surged"/"plunged", or an intensifier such as "sharply" next to the direction word). Used against FLAT findings (F5) and, in strict mode, against non-flat findings with a modest verified move (G4.7 E18). */
+/** `strong`: the claim uses forceful movement language (a strong verb such as "surged"/"plunged", or an intensifier such as "sharply" bound to THIS direction word by `intensifierSpan`,
+ * which does not read across a coordinator into a neighbouring predicate). Used against FLAT findings (F5) and, in strict mode, against non-flat findings with a modest verified move (G4.7 E18). */
 interface Claim { entities: Entity[]; dir: Dir; negated: boolean; word: string; forward: boolean; strong: boolean }
 const STRONG_WORDS = new Set(["surged", "surges", "soared", "soars", "jumped", "jumps", "spiked", "spikes", "plunged", "plunges", "tumbled", "collapsed", "surging", "soaring", "jumping", "plunging", "surge", "spike", "jump"]);
 const INTENSIFIER = /\b(?:sharply|sharp|dramatically|dramatic|significantly|significant|substantially|substantial|steeply|steep|markedly|massively|massive|considerably|considerable|strongly|rapidly|drastically|drastic|enormously|hugely|exponentially|aggressively)\b/;
+/** Coordinators that can join two PREDICATES inside one clause ("leads rose AND cac fell sharply"). `SPLIT` already ends a clause at a comma and at "but", "while", "whereas", ...,
+ * so only these chain-style coordinators can still sit between two direction words in the same clause. */
+const COORD = /\b(?:and|or|plus|nor)\b|&/g;
+/**
+ * The span around a direction word in which an intensifier is read as modifying THAT word. Proximity alone is not enough: in "lead volume rose and cac fell sharply" the
+ * intensifier belongs to "fell", so the +-24-character window is cut back at any coordinator that separates the direction word from a neighbouring predicate. A coordinator
+ * joining an entity CHAIN is harmless here ("leads and revenue rose sharply": the cut is behind "rose", the intensifier is ahead of it, and both entities keep the claim).
+ */
+function intensifierSpan(clause: string, start: number, end: number): string {
+  let from = Math.max(0, start - 24);
+  let to = Math.min(clause.length, end + 24);
+  COORD.lastIndex = from;
+  for (let m = COORD.exec(clause); m && m.index < start; m = COORD.exec(clause)) from = Math.min(start, m.index + m[0].length);
+  COORD.lastIndex = end;
+  const after = COORD.exec(clause);
+  if (after && after.index < to) to = after.index;
+  return clause.slice(from, to);
+}
 interface ClauseInfo { text: string; conditional: boolean; monitor: boolean }
 
 function clausesOf(text: string): ClauseInfo[] {
@@ -319,7 +338,7 @@ export function directionalClaims(text: string, lane: Lane, catalog: Catalog): C
       const chain = side === "left" ? chainLeft(es, subject, c.text) : [es[subject]!];
       const negated = auxNeg || NEGATOR.test(c.text.slice(Math.max(0, start - 28), start)) || (side === "right" && NEGATOR.test(c.text.slice(Math.max(0, start - 14), start)));
       const forward = !interp && c.monitor; // monitoring directives talk about what may happen next (S7)
-      const strong = STRONG_WORDS.has(word) || INTENSIFIER.test(c.text.slice(Math.max(0, start - 24), end + 24));
+      const strong = STRONG_WORDS.has(word) || INTENSIFIER.test(intensifierSpan(c.text, start, end));
       // valence words resolve per metric; departments have no polarity, so a valence word only counts as an assumed direction for the domain check
       if (w.dir) claims.push({ entities: chain, dir: w.dir, negated, word, forward, strong });
       else for (const e of chain) {

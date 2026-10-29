@@ -71,6 +71,9 @@ export const SCOPED_SYSTEM = (subject: string) =>
   "INTERPRETATIONS: each is one specific, testable hypothesis that links two or more cited facts through a concrete business mechanism (for example a shift in the mix of sources, segments or channels, " +
   "or a timing or capacity limit in a process). Hedge it once, and do not claim it as established or as the cause. A sentence that only says metrics may move together, or calls for joint review, is too generic. " +
   "MISSING_EVIDENCE: name the concrete breakdowns or data that would confirm or rule out your hypotheses (what to split, by which dimension, over which periods); include at least one when any hypothesis is open. " +
+  "This lane takes no refs, so it is where a remark that cites nothing belongs: never leave all three lanes empty, and put anything you cannot tie to a cited fact here rather than attaching an unrelated ref to it. " +
+  "Every interpretation and recommendation must be ABOUT what it cites: name the metric, its department, the movement or the cause you mean. " +
+  "Match the strength of your wording to the size of each fact's verified move: reserve forceful words (surged, plunged, sharply, steeply, dramatically) for the largest moves, and describe a modest one plainly (rose, fell). " +
   "RECOMMENDATIONS: each is one actionable investigation that says what to compare, segment, trace or collect and which cited facts motivate it; do not use vague verbs such as review, monitor or consider on their own. " +
   "Business concepts that are not metrics are fine in hypotheses, but never assert or imply a measured value, trend or comparison for anything outside VERIFIED_FACTS. " +
   `BE TERSE: at most ${LIMITS.interpretations} interpretations, ${LIMITS.missing} missing_evidence, ${LIMITS.recommendations} recommendations; each text one sentence under 25 words. Output only the JSON object.`;

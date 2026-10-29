@@ -1157,6 +1157,14 @@ const FIXTURES: Fixture[] = [
     reply: interp("Acquisition cost surged.", "F-cac"),
     expect: "ok",
   },
+  {
+    id: "E22",
+    desc: "G4.7a: an intensifier in a neighbouring predicate does not condemn a plain claim (closed deals -14.8% 'fell', acquisition cost +19.5% 'rose sharply')",
+    cls: "valid",
+    world: "exec",
+    reply: interp("Closed deals fell and cac rose sharply.", "F-closed_deals", "F-cac"),
+    expect: "ok",
+  },
 
   // ---- F. cross-guard interactions
   {

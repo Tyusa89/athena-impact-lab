@@ -657,6 +657,53 @@ describe("E17/E18: decided policies (G4.7) — empty responses are rejected, str
       "ok",
     );
   });
+  // G4.7 review follow-up: E18 made the `strong` flag load-bearing for every non-flat metric under the bar, which exposed the +-24-character intensifier window. An intensifier that
+  // belongs to a NEIGHBOURING predicate must not condemn this claim. "cac" is a catalog alias, so both halves of these sentences really are bound to their own metric.
+  const cacFact = (prior: number, current: number, pct: number | null): VerifiedFact => ({
+    ...fact(prior, current, pct),
+    fact_id: "F-cac",
+    metric: "cac",
+    unit: "USD",
+  });
+  const CAC_BIG_DOWN = cacFact(100, 50, -50); // large: "sharply" is truthful about cac
+  const pairIssues = (text: string, leads: VerifiedFact, cac = CAC_BIG_DOWN, strict = true) =>
+    checkSemantics(
+      text,
+      "interpretation",
+      genericScope([], [leads, cac], PROTOTYPE_CATALOG, {
+        discoverable: ["leads", "cac"],
+        strictMentions: strict,
+      }),
+    ).map((i) => i.code);
+  it("G4.7 E18: an intensifier binds to its own predicate, not across a coordinator (regression)", () => {
+    const modestUp = fact(100, 106, 6); // non-flat but under the 15% bar
+    // each half is truthful on its own
+    expect(pairIssues("Lead volume rose.", modestUp)).toEqual([]);
+    expect(pairIssues("Cac fell sharply.", modestUp)).toEqual([]);
+    // ...so the conjunction must stay accepted too: "sharply" modifies "fell" (cac), not "rose" (leads)
+    expect(pairIssues("Lead volume rose and cac fell sharply.", modestUp)).toEqual([]);
+    expect(pairIssues("Cac fell sharply and lead volume rose.", modestUp)).toEqual([]);
+    expect(pairIssues("Lead volume rose and cac sharply fell.", modestUp)).toEqual([]);
+    // the intensifier still binds inside its OWN predicate, on either side of the direction word
+    expect(pairIssues("Lead volume rose sharply and cac fell.", modestUp)).toEqual(["direction"]);
+    expect(pairIssues("Lead volume sharply rose and cac fell.", modestUp)).toEqual(["direction"]);
+    // unchanged: a strong VERB is bound by the word itself, never by the window
+    expect(pairIssues("Lead volume surged and cac fell.", modestUp)).toEqual(["direction"]);
+    // a coordinator joining an ENTITY CHAIN is not a predicate boundary: both subjects keep the strong claim
+    expect(
+      pairIssues("Lead volume and cac rose sharply.", modestUp, cacFact(100, 106, 6)),
+    ).toEqual(["direction", "direction"]);
+    // the legacy profile is untouched either way
+    expect(pairIssues("Lead volume rose and cac fell sharply.", modestUp, CAC_BIG_DOWN, false)).toEqual([]);
+    expect(pairIssues("Lead volume rose sharply and cac fell.", modestUp, CAC_BIG_DOWN, false)).toEqual([]);
+  });
+  it("G4.7 E18: the binding rule does not weaken F5, which still rejects a flat finding's OWN forceful wording", () => {
+    // the intensifier belongs to the cac predicate, so the flat leads claim is a plain (allowed) description of a small raw rise
+    expect(pairIssues("Lead volume rose and cac fell sharply.", SMALL_UP)).toEqual([]);
+    // ...but a flat finding with the intensifier in its own predicate is still rejected
+    expect(pairIssues("Lead volume rose sharply and cac fell.", SMALL_UP)).toEqual(["direction"]);
+    expect(issues(SMALL_UP, "Lead volume rose sharply.")).toEqual(["direction"]);
+  });
   it("the G4.5 reasoning score stays a non-gating metric: a weak reply that the validator accepts is still accepted", async () => {
     const weak = reply({
       i: [I("Lead volume may co-move with conversion patterns.", "F-leads", "F-conversion_rate")],

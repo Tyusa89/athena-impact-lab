@@ -208,6 +208,21 @@ describe("5-7. generic statements and multi-metric recommendations", () => {
     ).toBe(true);
     expect(refsConsistent("Gather more data.", ["F-revenue"], facts, CTX.catalog)).toBe(false);
   });
+  it("G4.7 review follow-up: a determiner-led PLURAL movement reference is direction-checked exactly like the singular", () => {
+    const facts = buildVerifiedFacts(EXEC.authorized, CTX);
+    // F-revenue fell and F-leads rose in this world, so "the decline(s)" may cite revenue but not leads alone.
+    for (const t of ["The decline may reflect seasonal demand.", "The declines may reflect seasonal demand."]) {
+      expect(refsConsistent(t, ["F-revenue"], facts, CTX.catalog), `${t} -> down fact`).toBe(true);
+      expect(refsConsistent(t, ["F-leads"], facts, CTX.catalog), `${t} -> up fact`).toBe(false);
+    }
+    // the same alignment in the other direction ("these increases" may not cite only a falling fact)
+    for (const t of ["The recent increase is encouraging.", "These increases are encouraging."]) {
+      expect(refsConsistent(t, ["F-leads"], facts, CTX.catalog), `${t} -> up fact`).toBe(true);
+      expect(refsConsistent(t, ["F-revenue"], facts, CTX.catalog), `${t} -> down fact`).toBe(false);
+    }
+    // the plural still ANCHORS the sentence, so it is not swept up by the G4.7 unanchored rule when the direction does match
+    expect(diag(strict(EXEC, "i", "The declines may reflect seasonal demand.", ["F-leads"]))).toEqual(["relevance"]);
+  });
   it("department vocabulary constrains citations only when a related fact exists (C11): a related fact is accepted, an unrelated one is rejected, and a department match is still not treated as verification", () => {
     expect(ok(strict(EXEC, "r", "Review the sales strategy.", ["F-conversion_rate"]))).toBe(true);
     expect(ok(strict(EXEC, "r", "Marketing and sales should communicate.", ["F-leads"]))).toBe(

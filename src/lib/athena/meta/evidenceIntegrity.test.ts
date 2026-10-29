@@ -166,6 +166,46 @@ describe("C11/C12: generic statements may not cite unrelated facts", () => {
       expect((await verdict(reply({ i: [I(t, "F-leads")] }))).state, t).toBe("ok");
     }
   });
+  it("an unrelated negation, condition or question elsewhere in the sentence does not exempt the mention (review fix)", async () => {
+    // baseline: leads rose, so none of these may cite F-leads for "the decline"
+    for (const t of [
+      "No one has explained the decline.",
+      "No one explained the recent decline.",
+      "We never discussed the drop.",
+      "Not all teams explained the decline.",
+      "Nobody owns this and no one explained the decline.",
+      "If asked, explain the decline.",
+      "Who owns this? Investigate the decline.",
+      "Is anyone free? Explain the decline.",
+    ]) {
+      expect(await verdict(reply({ i: [I(t, "F-leads")] })), t).toEqual({
+        state: "rejected",
+        cats: ["relevance"],
+      });
+      expect(await verdict(reply({ r: [R(t, "F-leads")] })), `${t} (recommendation)`).toEqual({
+        state: "rejected",
+        cats: ["relevance"],
+      });
+    }
+    // the same sentences are fine when a cited fact actually fell
+    expect(
+      (await verdict(reply({ i: [I("No one has explained the decline.", "F-conversion_rate")] })))
+        .state,
+    ).toBe("ok");
+  });
+  it("a negation, condition or question that governs the mention itself still exempts it", async () => {
+    for (const t of [
+      "There is no sign of the decline.",
+      "This is not the decline we expected.",
+      "The decline did not occur.",
+      "Without the decline, spending would be flat.",
+      "Whether the decline is seasonal is unclear.",
+      "If the decline continues, escalate.",
+      "Is the decline seasonal?",
+    ]) {
+      expect((await verdict(reply({ i: [I(t, "F-leads")] }))).state, t).toBe("ok");
+    }
+  });
   it("accepted citations still derive supporting records from the cited facts alone", async () => {
     const r = await run(
       reply({ r: [R("Review the sales strategy.", "F-conversion_rate", "F-leads")] }),
@@ -409,6 +449,15 @@ describe("F2: strict reasoning requires an explicit discoverability grant", () =
       ),
     ).toThrow(TypeError);
     expect(() =>
+      validateStrictOutput(
+        reply({}),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+        null as never,
+      ),
+    ).toThrow(TypeError);
+    expect(() =>
       buildScopedMessages("", a.authorized, PROTOTYPE_RUNTIME.analysis, undefined as never),
     ).toThrow(TypeError);
     expect(
@@ -430,6 +479,26 @@ describe("F2: strict reasoning requires an explicit discoverability grant", () =
     expect(() =>
       facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, { strictMentions: "true" as never }),
     ).toThrow(TypeError);
+    // null is not an explicit grant either: it must not fall through to the department-derived default (review fix)
+    for (const strictMentions of [true, "true" as never, 1 as never, null as never])
+      expect(() =>
+        facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, {
+          discoverable: null as never,
+          strictMentions,
+        }),
+      ).toThrow(TypeError);
+    // no facts, so only the grant counts: Marketing records are present, yet nothing is inferred from their department
+    expect(
+      facadeScope(a.authorized, [], PROTOTYPE_CATALOG, {
+        discoverable: [],
+        strictMentions: true,
+      }).discoverable?.size,
+    ).toBe(0);
+    expect(
+      facadeScope(a.authorized, facts, PROTOTYPE_CATALOG, {
+        discoverable: null as never,
+      }).discoverable?.has("mql_rate"),
+    ).toBe(true); // legacy unchanged
     // legacy (unset or false) keeps the department-derived default, so the goldens and legacy callers are unchanged
     expect(facadeScope(a.authorized, facts, PROTOTYPE_CATALOG).discoverable?.has("mql_rate")).toBe(
       true,

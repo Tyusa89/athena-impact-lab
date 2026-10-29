@@ -60,7 +60,47 @@ const DOWN = new Set([
   "downtick",
   "contraction",
 ]);
-const NEGATED_OR_OPEN = /\b(?:no|not|never|without|nor|neither|if|whether|unless)\b|\?/;
+const TERMINATOR = /[.!?;]/;
+/** A negator that governs the mention itself: directly in front of it ("not the decline", "without the decline") or in front of a "sign/evidence of" phrase ("no sign of the decline"). */
+const NEGATOR_BEFORE =
+  /\b(?:no|not|never|without|nor|neither)\s+(?:(?:signs?|evidence|traces?|hints?|indications?|suggestions?|proof)\s+of\s+)?$/;
+/** The mention is itself the subject of a denial ("the decline did not occur"). */
+const DENIED_AFTER =
+  /^\s*(?:(?:did|does|do|has|have|had|was|were|is|are|will|would|could)\s+)?(?:not|never)\s+(?:occur|happen|exist|materiali[sz]e|take place|appear|show)\b/;
+/**
+ * A mention asserts no movement only when the negation, condition or question applies to THAT mention, not when one merely appears elsewhere in the sentence:
+ *   - interrogative: the sentence the mention is in ends with "?";
+ *   - conditional/open: "if", "whether" or "unless" appears in the same clause before it (a comma, colon or sentence end starts a new clause);
+ *   - negated: a negator directly governs it (NEGATOR_BEFORE) or it is the subject of a denial (DENIED_AFTER).
+ * "No one has explained the decline" is not exempt: the negator belongs to another predicate, so the decline is still referred to as having happened.
+ */
+function mentionIsNotAClaim(norm: string, start: number, end: number): boolean {
+  let from = 0;
+  for (let i = start - 1; i >= 0; i--)
+    if (TERMINATOR.test(norm[i]!)) {
+      from = i + 1;
+      break;
+    }
+  let to = norm.length;
+  for (let i = end; i < norm.length; i++)
+    if (TERMINATOR.test(norm[i]!)) {
+      to = i;
+      break;
+    }
+  if (norm[to] === "?") return true;
+  let clauseFrom = from;
+  for (let i = start - 1; i >= from; i--)
+    if (norm[i] === "," || norm[i] === ":") {
+      clauseFrom = i + 1;
+      break;
+    }
+  const lead = norm.slice(clauseFrom, start);
+  return (
+    /\b(?:if|whether|unless)\b/.test(lead) ||
+    NEGATOR_BEFORE.test(lead) ||
+    DENIED_AFTER.test(norm.slice(end, to))
+  );
+}
 
 function genericCitationsRelated(
   norm: string,
@@ -84,10 +124,11 @@ function genericCitationsRelated(
     !cited.some((f) => depts.has(f.department))
   )
     return false;
-  if (NEGATED_OR_OPEN.test(norm)) return true; // a denied, conditional or interrogative reference asserts no movement
   const wanted = new Set<"up" | "down">();
   GENERIC_MOVE.lastIndex = 0;
-  for (let m = GENERIC_MOVE.exec(norm); m; m = GENERIC_MOVE.exec(norm))
+  for (let m = GENERIC_MOVE.exec(norm); m; m = GENERIC_MOVE.exec(norm)) {
+    if (mentionIsNotAClaim(norm, m.index, m.index + m[0].length)) continue; // a denied, conditional or interrogative mention asserts no movement
     wanted.add(DOWN.has(m[1]!) ? "down" : "up");
+  }
   return [...wanted].every((d) => cited.some((f) => f.direction === d));
 }

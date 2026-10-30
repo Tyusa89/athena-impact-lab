@@ -9,7 +9,7 @@ import {
 } from "../prototypeAdapter";
 import { PROTOTYPE_CATALOG } from "../prototypeCatalog";
 import { PROTOTYPE_RUNTIME } from "./adapter.server";
-import { OutputSchema } from "./analysis";
+import { OutputSchema, validateAuthorizedOutput } from "./analysis";
 import { buildAuthorizedFacts, type VerifiedFact } from "./grounding";
 import type { ModelOutcome, ModelProvider } from "./provider";
 import { refsConsistent } from "./refConsistency";
@@ -566,6 +566,85 @@ describe("E17/E18: decided policies (G4.7) — empty responses are rejected, str
     expect((await verdict(reply({ g: ["Lead counts and conversion by source."] }))).state).toBe(
       "ok",
     );
+  });
+  // MEDIUM-1 (G4.7b): the E17 non-empty rule counted ARRAY LENGTH, so a lane filled with blank, punctuation-only or placeholder text satisfied it. `missing_evidence` carries no refs
+  // and no other guard inspects it, so that was the one lane where a content-free response could be accepted.
+  it("G4.7b E17: a junk-only response does not satisfy the non-empty reasoning requirement (negative)", async () => {
+    for (const g of [
+      [" "],
+      ["\t\n "],
+      ["."],
+      ["..."],
+      ["?"],
+      ["-"],
+      ["---"],
+      ["n/a"],
+      ["N/A."],
+      ["n.a."],
+      ["na"],
+      ["none"],
+      ["None."],
+      ["nil"],
+      ["null"],
+      ["unknown"],
+      ["TBD"],
+      ["todo"],
+      ["nothing"],
+      ["not applicable"],
+      ["no data"],
+      ["​​"], // zero-width spaces
+      [" ", ".", "n/a"], // several junk entries are still junk
+    ])
+      expect(await verdict(reply({ g })), JSON.stringify(g)).toEqual({
+        state: "rejected",
+        cats: ["empty"],
+      });
+    // a digit-only entry never reaches this check: the pre-existing numeral rule rejects it first, and still does
+    expect(await verdict(reply({ g: ["123"] }))).toEqual({ state: "rejected", cats: ["numeral"] });
+  });
+  it("G4.7b E17: legitimate missing-evidence statements still pass, including terse ones (positive)", async () => {
+    for (const g of [
+      ["Lead counts and conversion by source."],
+      ["Staffing."], // a single real word is content
+      ["CAC by channel."],
+      ["Spend by campaign."],
+      ["No data exists for channel-level lead sources."], // starts like a placeholder but says something
+      ["None of the campaign exports cover the prior period."],
+      ["Unknown lead sources broken out by region."],
+    ])
+      expect((await verdict(reply({ g }))).state, JSON.stringify(g)).toBe("ok");
+  });
+  it("G4.7b E17: one meaningful entry anywhere is enough, in any lane (mixed valid and invalid)", async () => {
+    // a junk gap beside a real gap
+    expect((await verdict(reply({ g: [".", "Lead quality scores by source."] }))).state).toBe("ok");
+    expect((await verdict(reply({ g: ["Lead quality scores by source.", "n/a"] }))).state).toBe("ok");
+    // the meaningful entry lives in another lane while the gap lane is junk
+    expect(
+      (await verdict(reply({ i: [I("Lead volume rose.", "F-leads")], g: ["n/a"] }))).state,
+    ).toBe("ok");
+    expect(
+      (
+        await verdict(
+          reply({ r: [R("Compare lead volume by source.", "F-leads")], g: [" "] }),
+        )
+      ).state,
+    ).toBe("ok");
+  });
+  it("G4.7b E17: the rule is strict-only and changes no other safeguard", async () => {
+    // the legacy validator has no non-empty rule at all: a junk-only output is still accepted there
+    const junk = { interpretations: [], missing_evidence: [" ", "n/a"], recommendations: [] };
+    expect(OutputSchema.safeParse(junk).success).toBe(true); // the schema is unchanged
+    const a = authorizeDemo({ scenarioId: "baseline", roleId: "exec" });
+    expect(
+      validateAuthorizedOutput(
+        JSON.stringify(junk),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+      ).ok,
+    ).toBe(true);
+    // a junk gap does not mask a real violation in another lane: the stronger rejection still fires
+    expect((await verdict(reply({ i: [I("Revenue doubled.", "F-revenue")], g: ["n/a"] }))).cats).toContain("magnitude");
   });
   it("E18: qualitative magnitude supported by a large verified move stays accepted, while numeric and quantified magnitude stay rejected", async () => {
     for (const t of [

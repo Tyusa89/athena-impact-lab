@@ -29,6 +29,7 @@ export const RESIDUAL_LIMITATIONS = [
   "Transitive and base-form verbs, comparatives, goal nouns, habitual/generic statements and conditional clauses are deliberately not treated as claims.",
   "Standalone qualitative strength words with no direction word, and CJK/Roman numerals, are not magnitude-checked; forceful movement language about a metric is judged against the verified move (strict only).",
   "A direction word is bound to its subject by proximity and simple phrase rules; unusual sentence structure can bind to the wrong metric or to none, and genuinely ambiguous binding yields no claim (so it is not rejected).",
+  "An intensifier is bound to the nearest direction word within its own predicate (the window is cut at 'and', 'or', 'plus', 'nor'); predicates joined by an ampersand are not separated, because normalization removes '&' before clauses are formed.",
   "Elided subjects across clauses ('revenue slipped, then recovered') are not tracked, because binding across clauses would also reject legitimate path narratives.",
   "Comparatives and unlisted verbs/adverbials ('edged higher', 'cratered', 'eased', 'is trending up', 'rallied') are not recognised as directional claims.",
   "Statements about an unauthorized domain that use no recognised direction or valence word ('lead volume looks healthy', 'the sales pipeline is full') are not rejected.",
@@ -196,8 +197,10 @@ interface Claim { entities: Entity[]; dir: Dir; negated: boolean; word: string; 
 const STRONG_WORDS = new Set(["surged", "surges", "soared", "soars", "jumped", "jumps", "spiked", "spikes", "plunged", "plunges", "tumbled", "collapsed", "surging", "soaring", "jumping", "plunging", "surge", "spike", "jump"]);
 const INTENSIFIER = /\b(?:sharply|sharp|dramatically|dramatic|significantly|significant|substantially|substantial|steeply|steep|markedly|massively|massive|considerably|considerable|strongly|rapidly|drastically|drastic|enormously|hugely|exponentially|aggressively)\b/;
 /** Coordinators that can join two PREDICATES inside one clause ("leads rose AND cac fell sharply"). `SPLIT` already ends a clause at a comma and at "but", "while", "whereas", ...,
- * so only these chain-style coordinators can still sit between two direction words in the same clause. */
-const COORD = /\b(?:and|or|plus|nor)\b|&/g;
+ * so only these word coordinators can still sit between two direction words in the same clause. An ampersand is NOT listed and cannot be: `semanticText` runs before `clausesOf`
+ * and drops "&" entirely, so "leads rose & cac fell sharply" reaches this function as "leads rose cac fell sharply" with no coordinator token left to cut at. That is a residual
+ * limitation of the binding rule, not a handled case (see RESIDUAL_LIMITATIONS). */
+const COORD = /\b(?:and|or|plus|nor)\b/g;
 /**
  * The span around a direction word in which an intensifier is read as modifying THAT word. Proximity alone is not enough: in "lead volume rose and cac fell sharply" the
  * intensifier belongs to "fell", so the +-24-character window is cut back at any coordinator that separates the direction word from a neighbouring predicate. A coordinator

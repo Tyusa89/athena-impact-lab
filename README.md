@@ -11,6 +11,16 @@ Build an isolated, unpublished prototype named 'Athena Business Impact Engine â€
 - Meta output is split into three lanes: **verified findings** (computed and rendered by Athena on the server; no model text), **interpretations** (Muse Spark, always unverified, each pointing at verified facts) and **proposed actions** (Muse Spark, need human approval, never executable). The model may not write numbers; Athena shows them. Narrow semantic guards reject (never rewrite) model text that contradicts a verified finding, states an unsupported magnitude about a metric, or makes a directional claim about a metric/department the role cannot see; error messages are generic and never echo unauthorized identifiers. These are bounded heuristics: remaining gaps (look-alike characters, paraphrases, unlisted verbs, elided subjects, trailing time expressions) are documented in `semanticGuards.ts` and AGENTS.md, and no finite test corpus supports a claim of zero false rejects or bypasses in general use.
 - Still synthetic only: no EcoNest/Pendia connection, database, auth or deployment.
 
+## Tindara (the standalone engine)
+
+**Tindara** is the product name for the reasoning engine this repository developed as "Athena Engine". The app above is one *consumer* of it;
+EcoNest would be another. Its supported public entry point is `src/lib/tindara/index.ts`, documented in
+[`docs/tindara-public-api.md`](docs/tindara-public-api.md).
+
+C1 Phase 0 established that boundary only. **Production authentication, durable storage and an external REST API are not implemented**, and
+the demo's simulated identity is deliberately unreachable through the public entry point. Internal module paths and symbol names were not
+renamed.
+
 This project was built with [Lovable](https://lovable.dev).
 
 ## Build with Lovable

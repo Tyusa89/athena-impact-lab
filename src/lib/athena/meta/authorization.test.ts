@@ -340,18 +340,25 @@ describe("structure: the live path cannot reach raw evidence", () => {
   it("outside core/identity and tests, only the prototype adapter (the composition root) designates an identity adapter", async () => {
     const { readdirSync, statSync } = await import("node:fs");
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
-    const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary/.test(readFileSync(f, "utf8")));
+    // DESIGNATING an adapter means CALLING `createIdentityBoundary(...)`. Merely re-exporting the symbol (the Tindara public entry point does, so a
+    // consumer can designate its own) is not a designation, and is pinned separately below.
+    const users = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary\s*\(/.test(readFileSync(f, "utf8")));
     // core/ingest/testSupport.ts is the ingestion tests' own composition root; it must never be imported by production code (checked next)
     // src/lib/athena/workbench/workbench.server.ts is the composition root of the interactive Business Impact Map's second (customer-support) dataset: it designates one
     // SIMULATED identity adapter for its fixed synthetic tenant, exactly as the prototype adapter does for the demo tenant. It is server-only (checked below).
     expect(users.sort()).toEqual(["src/lib/athena/core/identity.ts", "src/lib/athena/core/ingest/testSupport.ts", "src/lib/athena/prototypeAdapter.ts", "src/lib/athena/workbench/workbench.server.ts"]);
     const importers = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && f !== "src/lib/athena/core/ingest/testSupport.ts" && /testSupport/.test(readFileSync(f, "utf8")));
     expect(importers).toEqual([]);
+    // Files that NAME `createIdentityBoundary` without calling it: only the core module that defines it and the public entry point that re-exports it.
+    const mentions = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f) && /createIdentityBoundary/.test(readFileSync(f, "utf8")));
+    expect(mentions.filter((f) => !users.includes(f)).sort()).toEqual(["src/lib/tindara/index.ts"]);
   });
   it("the browser bundle never imports the authorization or adapter modules", async () => {
     const { readdirSync, statSync } = await import("node:fs");
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
     const client = [...walk("src/components"), ...walk("src/routes")].filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f));
-    for (const f of client) expect(readFileSync(f, "utf8"), f).not.toMatch(/core\/access|core\/identity|prototypeAdapter|createIdentityBoundary/);
+    // `lib/tindara` is included because the public entry point re-exports core/access and core/identity: importing it from the browser bundle
+    // would pull the authorization modules in without naming them.
+    for (const f of client) expect(readFileSync(f, "utf8"), f).not.toMatch(/core\/access|core\/identity|prototypeAdapter|createIdentityBoundary|lib\/tindara/);
   });
 });

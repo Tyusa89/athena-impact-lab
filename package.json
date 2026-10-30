@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:bundle": "vite build --sourcemap && vitest run src/lib/tindara/browserBoundary.test.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"

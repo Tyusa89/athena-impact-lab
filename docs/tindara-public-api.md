@@ -63,7 +63,7 @@ resolve(input) → validateQuestion(untrusted) → identity.authenticate(credent
 | Runtime seam | `EngineRuntime`, `authorizeRequest`, `metaStatus`, `factsBlockReason`, `MetaResult`, `ResolvedRequest` |
 | Deterministic reasoning | `runImpactAnalysis`, `buildImpactMap`, `renderImpactMapMarkdown`, `RelationshipModel`, `validateRelationshipModel`, `ImpactMap` |
 | Model-assisted reasoning | `runAnalysis` (requires a caller-supplied provider) |
-| Output contract & validation | `OutputSchema`, `OUTPUT_JSON_SCHEMA`, `validateAuthorizedOutput`, `prepareMessages`, `renderFindings`, `buildVerifiedFacts`, `validateQuestion` |
+| Output contract & shapes | `OutputSchema`, `OUTPUT_JSON_SCHEMA`, `prepareMessages`, `renderFindings`, `buildVerifiedFacts`, `validateQuestion` |
 | Provider contract | `ModelProvider`, `ModelRequest`, `ModelOutcome`, `FAILURE_CODES`, `BLOCK_CODES` — **types and codes only** |
 | Limits & limitations | `MAX_INPUT_TOKENS`, `MAX_OUTPUT_TOKENS`, `REQUEST_TIMEOUT_MS`, `LIMITS`, `RESIDUAL_LIMITATIONS` |
 
@@ -76,6 +76,12 @@ resolve(input) → validateQuestion(untrusted) → identity.authenticate(credent
   any model vendor.
 - **The strict reasoning path** (`runStrictAnalysis`, `validateStrictOutput`, the scoped prompt). It is not promoted and nothing live calls it;
   leaving it off the public surface is how Phase 0 preserves strict/legacy separation. *This is a reviewable decision, not a permanent one.*
+- **`validateAuthorizedOutput` and its `ValidateProfile`** (removed in the PR #29 review, MEDIUM-2). The profile can switch on strict-profile
+  behaviour (`refConsistency`, `strictCausal`), so exporting it would place part of the strict profile on the Phase 0 surface. The validator
+  **still runs inside `runAnalysis` on every reply, unchanged** — only the ability to call it directly with a chosen profile is withheld. The
+  implementation was not modified; the generic module still exports it for the engine's own use. `OutputSchema`, `OUTPUT_JSON_SCHEMA` and the
+  result *shapes* remain exported, so a consumer can still type and inspect a result.
+- **`SemanticScopeOptions`**, because `semanticScope` itself is not exported, leaving the type no public use.
 - **Fixtures and test support.**
 
 ### These exclusions are enforced by tests, not by convention
@@ -91,8 +97,47 @@ resolve(input) → validateQuestion(untrusted) → identity.authenticate(credent
 Check 3 catches a direct re-export; check 4 catches one arriving through a chain of internal imports. Verified by probe: adding
 `export { PROTOTYPE_RUNTIME } from "../athena/meta/adapter.server"` fails **12** assertions across all four checks.
 
+A fifth check pins the **type-only** export surface by parsing the entry point's `export type { … }` blocks, because erased types cannot be
+enumerated from the imported namespace at runtime (LOW-5).
+
+`src/lib/tindara/browserBoundary.test.ts` adds the **transitive client-bundle check** (PR #29 review, MEDIUM-1). The pre-existing guard in
+`meta/authorization.test.ts` text-scans each client file for forbidden module names, which catches a *direct* import and misses an *indirect*
+one through an intermediary. The new check walks the dependency graph from the browser entry points (`src/router.tsx`, the generated route
+tree, and every file under `src/routes` and `src/components`), following relative and `@/`-aliased specifiers, side-effect imports,
+re-exports, and literal dynamic imports. `import type` / `export type` are skipped because TypeScript erases them. Both guards are kept:
+neither replaces the other.
+
+The one modelled boundary: a TanStack `createServerFn` module (`*.functions.ts`) reaches its server code through `await import(…)` inside a
+handler, and the plugin strips handler bodies from the client bundle, so dynamic imports are not followed out of those modules — their static
+imports still are. The two files that act as such a boundary are pinned, so adding a third is a reviewed change.
+
+The checker is a pure function over an injected reader, so the same code is exercised against synthetic graphs and the real repository. Its
+mutation tests prove it fails for a **direct** import, an **indirect** three-hop import where no client file mentions `tindara` at all, a
+relative (non-aliased) path, a literal dynamic import, a server-only module, the strict path, and the evidence ledger — and that a clean graph
+and a type-only import produce no violation. A mutation on the **real** graph (laundering the entry point through `athena/approvals.ts`, which
+the UI genuinely reaches) is also detected, with the unmutated graph asserted clean so the detection cannot be a baseline artefact.
+
 These complement the pre-existing boundary tests, which still pass unchanged: `core/importBoundary.test.ts`, `meta/engineBoundary.test.ts`
 and `meta/providers/importBoundary.test.ts`.
+
+### Measured: three pure modules already reach the browser bundle
+
+Building the transitive check revealed that `core/access.ts`, `core/identity.ts` and `prototypeAdapter.ts` are **already** reachable from the
+client on `main`, by paths no client file names:
+
+```
+src/routes/index.tsx      → athena/engine.ts    → core/facts.ts         → core/access.ts
+src/components/MetaPanel.tsx → meta/contract.ts → prototypeAdapter.ts   → core/identity.ts
+```
+
+`core/facts.ts` (used by the in-browser deterministic demo engine) imports the *value* `assertAuthorized` from `core/access`, and `MetaPanel`
+reaches `prototypeAdapter` through the `meta/contract` facade for the demo's role and scenario lists. This is **pre-existing and not a Phase 0
+regression**, and it is not treated as a failure: all three are pure, dependency-free modules holding no secret, credential or evidence, and
+the security model never rested on their absence from the client — authorization happens on the server over the server's own evidence. The set
+is **pinned** instead, so it cannot grow without review, and the direct-import guard in `meta/authorization.test.ts` is unchanged.
+
+Worth noting for a later phase, but out of scope here: the `meta/contract` facade pulls the whole validator into the client chunk, which is
+avoidable bundle surface.
 
 ## Not implemented
 
@@ -104,6 +149,38 @@ and `meta/providers/importBoundary.test.ts`.
 | **Rate limiting, idempotency keys, audit log** | **Not implemented.** |
 | **Multi-tenancy in practice** | Interfaces are tenant-aware and tenant isolation is enforced in `authorizeEvidence`; only one tenant exists in this repository. |
 | **Action execution** | **Intentionally absent.** Proposed actions carry `requires_human_approval: true` and `executable: false`. No executor exists, and any future one must live outside this engine and re-authorize independently. |
+
+## Limits of this boundary (PR #29 review, LOW-1 … LOW-5)
+
+Recorded so they are not mistaken for guarantees. None of these is fixed by Phase 0.
+
+1. **This is an in-repository module, not an installable package.** There is no build, no `package.json` `exports` map and no version:
+   "public" means "the supported import path *inside this repository*". Nothing mechanically stops a co-located consumer from deep-importing
+   `src/lib/athena/**` instead — only review and the boundary tests do. Packaging and versioning are future C1 work.
+2. **`EngineRuntime` is exported, as a type** (pinned in the type-only list). **`SemanticScopeOptions` is not**, because `semanticScope` is not
+   exported either, so the type has no public use. Neither appears in the runtime export list, because types are erased.
+3. **Identity assurance is self-declared by the adapter.** `IdentityVerifier.assurance` is a value the verifier states *about itself*, so a
+   consumer-supplied verifier can return `assurance: "verified"` while validating nothing. `allowSimulatedIdentity: false` enforces only that
+   the adapter **claimed** `"verified"` — it cannot check that a credential was really validated. **Real identity assurance is Phase 1 and must
+   be implemented and enforced outside this module.** Until then, treat `"verified"` as an unverified assertion by the deployment's own code.
+4. **The import-closure tests are static scans**, with known blind spots: a computed specifier (`import(someVar)`), a re-export laundered
+   through a bare package, a path alias other than `@/`, and any client entry outside the globs the test walks. A new top-level client entry
+   (or a new alias in `vite.config.ts`) would need the entry list updated; nothing detects that automatically.
+5. **Type-only exports are now pinned** by parsing `export type { … }` blocks, which is a source-level pin, not a type-system one: it detects a
+   changed export *list* but not a changed type *shape*. A breaking change to an exported interface would still pass.
+
+## Phase status
+
+| Capability | Phase | Status |
+|---|---|---|
+| Public entry point, boundary tests, docs | **C1 Phase 0** | **implemented (this PR)** |
+| Real identity verifier, production auth enforcement | C1 Phase 1 | not started |
+| Durable evidence ledger | C1 Phase 2 | not started |
+| Read-only reasoning REST API | C1 Phase 3 | not started |
+| Evidence ingress API | C1 Phase 4 | not started |
+| Model path enabled per tenant; strict promotion | C1 Phase 5 | not started |
+| Installable package + versioning | future | not started |
+| Action execution | — | intentionally absent, no phase assigned |
 
 ## Current limitations of the engine itself
 

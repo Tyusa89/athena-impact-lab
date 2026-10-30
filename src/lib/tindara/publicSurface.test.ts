@@ -16,6 +16,19 @@ const ENTRY = "src/lib/tindara/index.ts";
 const SRC = "src/lib";
 
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, " ");
+
+/** LOW-5: type-only exports are erased at runtime, so `Object.keys` cannot see them. They are pinned by parsing the entry point's own
+ * `export type { ... }` blocks instead. Without this, a type could be added to or removed from the public surface unnoticed. */
+function typeOnlyExports(): string[] {
+  const code = stripComments(readFileSync(ENTRY, "utf8"));
+  const names = new Set<string>();
+  for (const m of code.matchAll(/\bexport\s+type\s*\{([^}]*)\}/g))
+    for (const raw of m[1]!.split(",")) {
+      const n = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop()!.trim();
+      if (n) names.add(n);
+    }
+  return [...names].sort();
+}
 const specifiersOf = (source: string): string[] =>
   [
     ...source.matchAll(/\bimport\s+(?:type\s+)?(?:[\w*{},\s$]+?\s+from\s+)?["']([^"']+)["']/g),
@@ -111,14 +124,42 @@ describe("3. the runtime export surface is pinned", () => {
     "createEvidenceLedger", "createIdentityBoundary", "csvAdapter", "describeChange", "domainDef", "estimateTokens", "factIdFor",
     "factsBlockReason", "goodDirection", "importSource", "isAuthorizedEvidence", "isImportResult", "isIsoDate", "metaStatus", "metricDef",
     "metricDomain", "metricLabel", "parseCsv", "prepareMessages", "renderFindings", "renderImpactMapMarkdown", "requireMetric",
-    "runAnalysis", "runImpactAnalysis", "sha256Hex", "validateAuthorizedOutput", "validateCatalog", "validateMapping", "validateQuestion",
+    "runAnalysis", "runImpactAnalysis", "sha256Hex", "validateCatalog", "validateMapping", "validateQuestion",
     "validateRecords", "validateRelationshipModel",
   ];
   it("exports exactly the pinned list", () => {
     expect(Object.keys(tindara).sort()).toEqual([...EXPECTED].sort());
   });
+  it("MEDIUM-2: the strict-capable validator and its profile are NOT exported", () => {
+    // `validateAuthorizedOutput` takes a `ValidateProfile` that can switch on strict behaviour (refConsistency, strictCausal), so exporting it
+    // would put part of the strict profile on the Phase 0 surface. It still runs inside `runAnalysis`; only direct, profile-chosen calls are withheld.
+    for (const id of ["validateAuthorizedOutput", "validateOutput", "ValidateProfile"]) expect(Object.keys(tindara), id).not.toContain(id);
+    expect(typeOnlyExports()).not.toContain("ValidateProfile");
+    // the implementation is untouched: the generic module still exports it for the engine's own use
+    expect(readFileSync("src/lib/athena/meta/analysis.ts", "utf8")).toMatch(/export function validateAuthorizedOutput/);
+  });
   it("exports no demo runtime, demo identity, concrete provider or strict entry point", () => {
     for (const id of FORBIDDEN_IDENTIFIERS) expect(Object.keys(tindara), id).not.toContain(id);
+  });
+  it("LOW-5: the TYPE-ONLY export surface is pinned too (it cannot be seen at runtime)", () => {
+    expect(typeOnlyExports()).toEqual([
+      "AccessPolicy", "Aggregation", "AnalysisContext", "Assurance", "AuthorizationResult", "AuthorizedEvidence", "BlockCode", "Catalog",
+      "CommitOutcome", "CoreFact", "CoreRecord", "Direction", "DomainDef", "DomainIdOf", "EngineRuntime", "Evidence", "EvidenceLedger",
+      "EvidenceLike", "EvidenceScope", "EvidenceStore", "FailureCode", "FieldRole", "IdentityBoundary", "IdentityVerifier", "ImpactAction",
+      "ImpactHypothesis", "ImpactMap", "ImpactOptions", "ImpactResult", "ImportBatch", "ImportLimits", "ImportOptions", "ImportPolicy",
+      "ImportRequest", "ImportResult", "ImportStatus", "MappingSpec", "MetaOutput", "MetaResult", "MetaStatus", "MetricDef", "MetricKeyOf",
+      "ModelMessage", "ModelOutcome", "ModelOutput", "ModelProvider", "ModelRequest", "ModelUsage", "PeriodPair", "PeriodSpec", "Polarity",
+      "Prepared", "Provenance", "ProvenanceRef", "ProviderCall", "ProviderEnv", "ProviderStatus", "QuestionRejection", "QuestionResult",
+      "RawRow", "RawTable", "RejectedRecord", "RejectionCode", "RejectionReason", "RelationshipAssessment", "RelationshipModel",
+      "RelationshipRule", "RelationshipStatus", "ResolvedRequest", "SourceAdapter", "SourceDescriptor", "SourceReadResult", "StructuralCode",
+      "StructuralError", "TrustedContext", "Usage", "ValidationResult", "VerifiedChange", "VerifiedFact", "VerifiedFinding", "VerifiedIdentity",
+    ]);
+  });
+  it("LOW-2: `EngineRuntime` IS exported (as a type); `SemanticScopeOptions` is intentionally not", () => {
+    expect(typeOnlyExports()).toContain("EngineRuntime");
+    // `semanticScope` is not on the public surface, so its options bag has no public use
+    expect(typeOnlyExports()).not.toContain("SemanticScopeOptions");
+    expect(Object.keys(tindara)).not.toContain("semanticScope");
   });
   it("the deterministic entry point and the runtime seam are present and callable", () => {
     expect(typeof tindara.runImpactAnalysis).toBe("function");

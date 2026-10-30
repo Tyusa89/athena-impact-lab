@@ -25,6 +25,23 @@
 // `createIdentityBoundary` is the slot where a real verifier goes; `createEvidenceLedger` is an IN-MEMORY reference implementation; and there
 // is no HTTP surface in this repository. Until a real verifier exists, a deployment that sets `allowSimulatedIdentity: true` has no
 // authentication at all.
+//
+// FOUR LIMITS OF THIS BOUNDARY, recorded so they are not mistaken for guarantees:
+//   * THIS IS AN IN-REPOSITORY MODULE, NOT A PACKAGE. There is no build, no `package.json` `exports` map and no version: "public" means
+//     "the supported import path inside this repository". Nothing prevents a co-located consumer from deep-importing `../athena/**` instead;
+//     only review and the boundary tests do. Packaging is future C1 work.
+//   * ASSURANCE IS SELF-DECLARED BY THE ADAPTER. `IdentityVerifier.assurance` is a value the verifier states about itself, so a consumer-supplied
+//     verifier can return `assurance: "verified"` while validating nothing. `allowSimulatedIdentity: false` enforces only that the adapter
+//     CLAIMED "verified"; it cannot check that a credential was really validated. Real identity assurance is Phase 1 and must be enforced
+//     outside this module.
+//   * THE IMPORT-CLOSURE TESTS ARE STATIC SCANS. They follow relative and `@/`-aliased specifiers and literal dynamic imports; they cannot
+//     follow a computed specifier, a re-export through a bare package, or a module added under a path their entry list does not cover.
+//   * TYPE-ONLY EXPORTS DO NOT EXIST AT RUNTIME, so they cannot be enumerated from the imported namespace. They are pinned by parsing this
+//     file's `export type { ... }` blocks instead (see ./publicSurface.test.ts).
+//
+// Two symbols are deliberately absent although they are part of the engine's internals: `SemanticScopeOptions` (the options bag of
+// `semanticScope`, which is itself not exported, so the type has no public use) and `validateAuthorizedOutput` with its `ValidateProfile`
+// (see the output-contract section below). `EngineRuntime` IS exported, as a type.
 
 // ----------------------------------------------------------------------------------------------------------- identity (the authentication slot)
 export { AuthorizationError, createIdentityBoundary, IDENTITY_TIMEOUT_MS } from "../athena/core/identity";
@@ -68,9 +85,12 @@ export type {
 // ----------------------------------------------------------------------------------------------------------- model-assisted reasoning (the caller supplies the provider)
 export { runAnalysis } from "../athena/meta/runtime";
 
-// ----------------------------------------------------------------------------------------------------------- the model-output contract and its validation
-export { DEFAULT_PROMPT_SUBJECT, estimateTokens, OutputSchema, prepareMessages, validateAuthorizedOutput } from "../athena/meta/analysis";
-export type { MetaOutput, ModelOutput, ValidateProfile, ValidationResult } from "../athena/meta/analysis";
+// ----------------------------------------------------------------------------------------------------------- the model-output contract (shapes, not the validator)
+// `validateAuthorizedOutput` and its `ValidateProfile` are NOT exported (MEDIUM-2): the profile can switch on strict-profile behaviour
+// (`refConsistency`, `strictCausal`), so exporting it would let a consumer invoke part of the strict profile from the Phase 0 surface. The
+// validator still runs INSIDE `runAnalysis` on every reply, unchanged; only the ability to call it directly with a chosen profile is withheld.
+export { DEFAULT_PROMPT_SUBJECT, estimateTokens, OutputSchema, prepareMessages } from "../athena/meta/analysis";
+export type { MetaOutput, ModelOutput, ValidationResult } from "../athena/meta/analysis";
 export { OUTPUT_JSON_SCHEMA } from "../athena/meta/outputSchema";
 export { buildAuthorizedFacts, buildVerifiedFacts, factIdFor } from "../athena/meta/grounding";
 export type { VerifiedFact } from "../athena/meta/grounding";

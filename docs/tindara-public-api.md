@@ -136,6 +136,13 @@ JSON)"*; touching a source file fails with *"Build artifacts are STALE"*. The st
 plugin rewrites it during the build) and test files (never bundled). With no build and no flag the section is skipped, but
 `assertFreshArtifacts` is itself unit-tested against synthetic input, so the fail-closed logic stays regression-covered either way.
 
+> **CI enforcement status: NOT IMPLEMENTED — the bundle layer is a local/manual gate.**
+> `.github/workflows/ci.yml` (on pull requests into `main`) runs `bun run test`, then `bunx tsc --noEmit`, then `bun run build`. It does **not**
+> run `verify:bundle` and does not set `TINDARA_VERIFY_BUNDLE`. Because the build step runs *after* the tests, no artifacts exist at test time,
+> so the bundle-level section **skips on CI** and only the static layer runs automatically there. Do not read the bundle check as mandatory.
+> Closing the gap means either adding a `verify:bundle` step or ordering the build before the tests; that is an open repo-workflow decision and
+> was deliberately not made in this PR. The CI workflow is unmodified by this branch.
+
 The transitive scan found `core/access.ts`, `core/identity.ts` and `prototypeAdapter.ts` statically reachable, by paths no client file names:
 
 ```
@@ -217,6 +224,7 @@ the reliance. The bundle-level test above is what makes a regression here visibl
 | **Durable storage** | **Not implemented.** `createEvidenceLedger` is an **in-memory** reference implementation. Its rules (tenant partitioning, idempotency, duplicate/conflict rejection) are the contract a durable replacement must keep. |
 | **External REST API / webhooks / async jobs** | **Not implemented.** No HTTP surface, no queue, no scheduler. The only transports in the repository are the prototype's TanStack server functions. |
 | **Rate limiting, idempotency keys, audit log** | **Not implemented.** |
+| **CI enforcement of bundle verification** | **Not implemented.** `ci.yml` runs test → typecheck → build, so no artifacts exist when the tests run and the bundle layer skips. `bun run verify:bundle` is a local/manual gate; the static layer is what runs automatically. |
 | **Multi-tenancy in practice** | Interfaces are tenant-aware and tenant isolation is enforced in `authorizeEvidence`; only one tenant exists in this repository. |
 | **Action execution** | **Intentionally absent.** Proposed actions carry `requires_human_approval: true` and `executable: false`. No executor exists, and any future one must live outside this engine and re-authorize independently. |
 

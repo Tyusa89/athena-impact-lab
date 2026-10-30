@@ -373,11 +373,16 @@ const builtJs = () => walk(BUILD_DIR).filter((f) => f.endsWith(".js"));
 const builtMaps = () => walk(BUILD_DIR).filter((f) => f.endsWith(".js.map"));
 
 /**
- * When is bundle verification EXPECTED? Whenever a build exists (`.output/public` present), or when CI forces it with
+ * When is bundle verification EXPECTED? Whenever a build exists (`.output/public` present), or when a caller forces it by setting
  * `TINDARA_VERIFY_BUNDLE=1`. Once expected, it FAILS CLOSED: absent, unreadable, malformed or STALE artifacts are failures, never skips.
  * `bun run verify:bundle` (vite build --sourcemap && this file) is the one command that guarantees a fresh build plus verification.
  * With no build and no flag the section is skipped — but `assertFreshArtifacts` itself is unit-tested below, so the fail-closed behaviour is
  * regression-covered either way.
+ *
+ * NOT CURRENTLY ENFORCED BY CI. `.github/workflows/ci.yml` runs `bun run test`, then the typecheck, then `bun run build` — it does not run
+ * `verify:bundle` and does not set the flag, and because the build runs AFTER the tests there are no artifacts at test time, so this section
+ * skips on CI. Wiring it in (run `verify:bundle`, or order the build before the tests) is an open repo-workflow decision, deliberately not
+ * made in this PR. Until then the bundle layer is a local/manual gate, and only the static layer above runs automatically.
  */
 const verificationExpected = () => process.env["TINDARA_VERIFY_BUNDLE"] === "1" || existsSync(BUILD_DIR);
 
@@ -435,7 +440,8 @@ describe("the fail-closed artifact check behaves correctly (synthetic, always ru
   });
 });
 
-// Fail-closed: when a build exists (or CI sets TINDARA_VERIFY_BUNDLE=1) every check below must pass; nothing here is skipped silently.
+// Fail-closed: when a build exists (or TINDARA_VERIFY_BUNDLE=1 is set) every check below must pass; nothing here is skipped silently. CI does
+// not currently reach this section — see the note on `verificationExpected` above.
 describe.skipIf(!verificationExpected())("the emitted client bundle contains nothing privileged", () => {
   it("the artifacts are present, readable, well-formed and FRESH (fails closed otherwise)", () => {
     expect(() => assertFreshArtifacts(builtMaps(), builtJs(), realRead, (f) => statSync(f).mtimeMs, newestSourceMtime())).not.toThrow();

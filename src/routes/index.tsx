@@ -11,9 +11,9 @@ import { Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Athena Business Impact Engine — Hackathon Lab" },
-      { name: "description", content: "Evidence-linked cross-department reasoning demo on synthetic data. Not connected to EcoNest." },
-      { property: "og:title", content: "Athena Business Impact Engine — Hackathon Lab" },
+      { title: "Tindara — AI Business Reasoning Engine · Hackathon Lab" },
+      { name: "description", content: "Tindara transforms verified business evidence into grounded insights, testable hypotheses, and actionable recommendations. Synthetic-data demo; not connected to EcoNest." },
+      { property: "og:title", content: "Tindara — AI Business Reasoning Engine · Hackathon Lab" },
       { property: "og:description", content: "Synthetic-data demo: why sales decline while leads rise." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -90,7 +90,10 @@ function Index() {
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">EcoNest · Hackathon Lab · Prototype</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Athena Business Impact Engine</h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Tindara</h1>
+            <p className="mt-1 text-lg font-medium text-foreground/90">AI Business Reasoning Engine</p>
+            <p className="mt-1 text-sm italic text-muted-foreground">Understand the Evidence. Discover the Possibilities.</p>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Tindara transforms verified business evidence into grounded insights, testable hypotheses, and actionable recommendations. Designed as an independent reasoning engine, Tindara can support multiple business systems through secure integrations.</p>
             <p className="mt-1 text-sm"><Link to="/impact" className="text-accent underline">Open the interactive Business Impact Map →</Link></p>
             <p className="mt-2 text-sm text-muted-foreground">
               Company: <span className="font-semibold text-foreground">{COMPANY.name}</span> <Pill className="ml-1 border-warning/50 text-warning">{COMPANY.label}</Pill>

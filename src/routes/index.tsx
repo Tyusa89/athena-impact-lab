@@ -7,6 +7,7 @@ import { useReducer } from "react";
 import { PROVIDERS } from "@/lib/athena/provider";
 import { MetaPanel } from "@/components/MetaPanel";
 import { Link } from "@tanstack/react-router";
+import tindaraLogo from "@/assets/tindara-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -90,9 +91,10 @@ function Index() {
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">EcoNest · Hackathon Lab · Prototype</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Tindara</h1>
-            <p className="mt-1 text-lg font-medium text-foreground/90">AI Business Reasoning Engine</p>
-            <p className="mt-1 text-sm italic text-muted-foreground">Understand the Evidence. Discover the Possibilities.</p>
+            <h1 className="mt-3">
+              <img src={tindaraLogo.url} alt="Tindara — AI Business Reasoning Engine" className="w-full max-w-sm rounded-xl border border-border" />
+            </h1>
+            <p className="mt-2 text-sm italic text-muted-foreground">Understand the Evidence. Discover the Possibilities.</p>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Tindara transforms verified business evidence into grounded insights, testable hypotheses, and actionable recommendations. Designed as an independent reasoning engine, Tindara can support multiple business systems through secure integrations.</p>
             <p className="mt-1 text-sm"><Link to="/impact" className="text-accent underline">Open the interactive Business Impact Map →</Link></p>
             <p className="mt-2 text-sm text-muted-foreground">

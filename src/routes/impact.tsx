@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ImpactWorkbench } from "@/components/impact/ImpactWorkbench";
 import { getWorkbenchOptions, runImpactWorkbench } from "@/lib/athena/workbench/workbench.functions";
 import type { WorkbenchDatasetInfo, WorkbenchRequest, WorkbenchResult } from "@/lib/athena/workbench/view";
+import tindaraLogo from "@/assets/tindara-logo.png.asset.json";
 
 export const Route = createFileRoute("/impact")({
   head: () => ({
@@ -30,7 +31,10 @@ function ImpactPage() {
       </div>
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
         <header>
-          <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">Tindara · AI Business Reasoning Engine</p>
+          <div className="flex items-center gap-3">
+            <img src={tindaraLogo.url} alt="Tindara" className="h-12 w-auto rounded-md border border-border" />
+            <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">Tindara · AI Business Reasoning Engine</p>
+          </div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Business Impact Map</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Ask a business question. The engine reports what the verified data show, which declared relationships moved together, what is only a hypothesis, what evidence is missing, and what could be proposed for human approval. Roles here are simulated to show scope: there is no sign-in. <Link to="/" className="text-accent underline">Back to the prototype</Link></p>
         </header>

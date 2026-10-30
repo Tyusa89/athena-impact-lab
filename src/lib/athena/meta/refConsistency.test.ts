@@ -193,10 +193,35 @@ describe("5-7. generic statements and multi-metric recommendations", () => {
       ),
     ).toBe(true);
   });
-  it("accepts a generic business recommendation (no metric, no department)", () => {
-    expect(ok(strict(EXEC, "r", "Consider scheduling a planning workshop.", ["F-leads"]))).toBe(
-      true,
-    );
+  it("G4.7 rejects a generic business recommendation (no metric, no department, no hook): it may not display supporting facts", () => {
+    expect(
+      diag(strict(EXEC, "r", "Consider scheduling a planning workshop.", ["F-leads"])),
+    ).toEqual(["relevance"]);
+  });
+  it("G4.7 anchor boundary: an exempted movement reference or a causal topic still passes without a department", () => {
+    const facts = buildVerifiedFacts(EXEC.authorized, CTX);
+    expect(
+      refsConsistent("There was no decline in the period.", ["F-leads"], facts, CTX.catalog),
+    ).toBe(true);
+    expect(
+      refsConsistent("The root cause is unknown.", ["F-revenue"], facts, CTX.catalog),
+    ).toBe(true);
+    expect(refsConsistent("Gather more data.", ["F-revenue"], facts, CTX.catalog)).toBe(false);
+  });
+  it("G4.7 review follow-up: a determiner-led PLURAL movement reference is direction-checked exactly like the singular", () => {
+    const facts = buildVerifiedFacts(EXEC.authorized, CTX);
+    // F-revenue fell and F-leads rose in this world, so "the decline(s)" may cite revenue but not leads alone.
+    for (const t of ["The decline may reflect seasonal demand.", "The declines may reflect seasonal demand."]) {
+      expect(refsConsistent(t, ["F-revenue"], facts, CTX.catalog), `${t} -> down fact`).toBe(true);
+      expect(refsConsistent(t, ["F-leads"], facts, CTX.catalog), `${t} -> up fact`).toBe(false);
+    }
+    // the same alignment in the other direction ("these increases" may not cite only a falling fact)
+    for (const t of ["The recent increase is encouraging.", "These increases are encouraging."]) {
+      expect(refsConsistent(t, ["F-leads"], facts, CTX.catalog), `${t} -> up fact`).toBe(true);
+      expect(refsConsistent(t, ["F-revenue"], facts, CTX.catalog), `${t} -> down fact`).toBe(false);
+    }
+    // the plural still ANCHORS the sentence, so it is not swept up by the G4.7 unanchored rule when the direction does match
+    expect(diag(strict(EXEC, "i", "The declines may reflect seasonal demand.", ["F-leads"]))).toEqual(["relevance"]);
   });
   it("department vocabulary constrains citations only when a related fact exists (C11): a related fact is accepted, an unrelated one is rejected, and a department match is still not treated as verification", () => {
     expect(ok(strict(EXEC, "r", "Review the sales strategy.", ["F-conversion_rate"]))).toBe(true);
@@ -240,11 +265,18 @@ describe("10. ordinary-language false positives (fail closed, documented)", () =
   it("...and passes when the leads fact is cited, so the model can recover", () => {
     expect(ok(strict(EXEC, "r", "Lead the review of the plan.", ["F-leads"]))).toBe(true);
   });
-  it("words that are not aliases are not mentions", () => {
-    expect(ok(strict(EXEC, "r", "Consider a leadership offsite.", ["F-revenue"]))).toBe(true);
-    expect(ok(strict(EXEC, "r", "The team is conversant with the tooling.", ["F-revenue"]))).toBe(
-      true,
-    );
+  it("words that are not aliases are not mentions — but an unanchored sentence is now rejected anyway (G4.7)", () => {
+    // "leadership" and "conversant" match no catalog alias: with no hook of any kind the citations are arbitrary, so G4.7 rejects them.
+    expect(diag(strict(EXEC, "r", "Consider a leadership offsite.", ["F-revenue"]))).toEqual([
+      "relevance",
+    ]);
+    expect(
+      diag(strict(EXEC, "r", "The team is conversant with the tooling.", ["F-revenue"])),
+    ).toEqual(["relevance"]);
+    // positive control: if "lead" matched inside "leadership", citing F-leads would be an exact match and pass; it does not.
+    expect(diag(strict(EXEC, "r", "Consider a leadership offsite.", ["F-leads"]))).toEqual([
+      "relevance",
+    ]);
   });
 });
 

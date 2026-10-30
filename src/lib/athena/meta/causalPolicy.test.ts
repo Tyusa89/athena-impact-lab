@@ -391,6 +391,7 @@ describe("end to end through the strict validator", () => {
       "domain",
       "unavailable",
       "provider",
+      "empty",
       "unknown",
     ]);
     expect(

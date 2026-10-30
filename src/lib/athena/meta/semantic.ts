@@ -27,8 +27,9 @@ export const RESIDUAL_LIMITATIONS = [
   "Cross-script look-alike characters (e.g. Cyrillic letters inside a metric word) are not folded and can evade the term matching.",
   "Paraphrases the term tables do not list (e.g. 'top-of-funnel volume', 'the pipeline got bigger') are not recognised.",
   "Transitive and base-form verbs, comparatives, goal nouns, habitual/generic statements and conditional clauses are deliberately not treated as claims.",
-  "Qualitative strength words (sharply, dramatically) and CJK/Roman numerals are not magnitude-checked.",
+  "Standalone qualitative strength words with no direction word, and CJK/Roman numerals, are not magnitude-checked; forceful movement language about a metric is judged against the verified move (strict only).",
   "A direction word is bound to its subject by proximity and simple phrase rules; unusual sentence structure can bind to the wrong metric or to none, and genuinely ambiguous binding yields no claim (so it is not rejected).",
+  "An intensifier is bound to the nearest direction word within its own predicate (the window is cut at 'and', 'or', 'plus', 'nor'); predicates joined by an ampersand are not separated, because normalization removes '&' before clauses are formed.",
   "Elided subjects across clauses ('revenue slipped, then recovered') are not tracked, because binding across clauses would also reject legitimate path narratives.",
   "Comparatives and unlisted verbs/adverbials ('edged higher', 'cratered', 'eased', 'is trending up', 'rallied') are not recognised as directional claims.",
   "Statements about an unauthorized domain that use no recognised direction or valence word ('lead volume looks healthy', 'the sales pipeline is full') are not rejected.",
@@ -190,10 +191,31 @@ const OFF_PERIOD = /\b(?:in|during|over|around|before|after|every|each)\s+(?:the
 const IDIOM_TAIL = /^(?:short|behind|through|apart|victim|prey|foul|into|under|flat|to the occasion|out of (?:favou?r|line|step))\b/;
 const MONITOR_LEAD = /^(?:please\s+)?(?:watch|monitor|track|check|verify|confirm|test|see|flag|alert|look for|keep an eye on|stay alert|be alert|prepare for|plan for|anticipate|expect|guard against|brace for|find out)\b/;
 
-/** `strong`: the claim uses forceful movement language (a strong verb such as "surged"/"plunged", or an intensifier such as "sharply" next to the direction word). Used only against FLAT findings (F5). */
+/** `strong`: the claim uses forceful movement language (a strong verb such as "surged"/"plunged", or an intensifier such as "sharply" bound to THIS direction word by `intensifierSpan`,
+ * which does not read across a coordinator into a neighbouring predicate). Used against FLAT findings (F5) and, in strict mode, against non-flat findings with a modest verified move (G4.7 E18). */
 interface Claim { entities: Entity[]; dir: Dir; negated: boolean; word: string; forward: boolean; strong: boolean }
 const STRONG_WORDS = new Set(["surged", "surges", "soared", "soars", "jumped", "jumps", "spiked", "spikes", "plunged", "plunges", "tumbled", "collapsed", "surging", "soaring", "jumping", "plunging", "surge", "spike", "jump"]);
 const INTENSIFIER = /\b(?:sharply|sharp|dramatically|dramatic|significantly|significant|substantially|substantial|steeply|steep|markedly|massively|massive|considerably|considerable|strongly|rapidly|drastically|drastic|enormously|hugely|exponentially|aggressively)\b/;
+/** Coordinators that can join two PREDICATES inside one clause ("leads rose AND cac fell sharply"). `SPLIT` already ends a clause at a comma and at "but", "while", "whereas", ...,
+ * so only these word coordinators can still sit between two direction words in the same clause. An ampersand is NOT listed and cannot be: `semanticText` runs before `clausesOf`
+ * and drops "&" entirely, so "leads rose & cac fell sharply" reaches this function as "leads rose cac fell sharply" with no coordinator token left to cut at. That is a residual
+ * limitation of the binding rule, not a handled case (see RESIDUAL_LIMITATIONS). */
+const COORD = /\b(?:and|or|plus|nor)\b/g;
+/**
+ * The span around a direction word in which an intensifier is read as modifying THAT word. Proximity alone is not enough: in "lead volume rose and cac fell sharply" the
+ * intensifier belongs to "fell", so the +-24-character window is cut back at any coordinator that separates the direction word from a neighbouring predicate. A coordinator
+ * joining an entity CHAIN is harmless here ("leads and revenue rose sharply": the cut is behind "rose", the intensifier is ahead of it, and both entities keep the claim).
+ */
+function intensifierSpan(clause: string, start: number, end: number): string {
+  let from = Math.max(0, start - 24);
+  let to = Math.min(clause.length, end + 24);
+  COORD.lastIndex = from;
+  for (let m = COORD.exec(clause); m && m.index < start; m = COORD.exec(clause)) from = Math.min(start, m.index + m[0].length);
+  COORD.lastIndex = end;
+  const after = COORD.exec(clause);
+  if (after && after.index < to) to = after.index;
+  return clause.slice(from, to);
+}
 interface ClauseInfo { text: string; conditional: boolean; monitor: boolean }
 
 function clausesOf(text: string): ClauseInfo[] {
@@ -319,7 +341,7 @@ export function directionalClaims(text: string, lane: Lane, catalog: Catalog): C
       const chain = side === "left" ? chainLeft(es, subject, c.text) : [es[subject]!];
       const negated = auxNeg || NEGATOR.test(c.text.slice(Math.max(0, start - 28), start)) || (side === "right" && NEGATOR.test(c.text.slice(Math.max(0, start - 14), start)));
       const forward = !interp && c.monitor; // monitoring directives talk about what may happen next (S7)
-      const strong = STRONG_WORDS.has(word) || INTENSIFIER.test(c.text.slice(Math.max(0, start - 24), end + 24));
+      const strong = STRONG_WORDS.has(word) || INTENSIFIER.test(intensifierSpan(c.text, start, end));
       // valence words resolve per metric; departments have no polarity, so a valence word only counts as an assumed direction for the domain check
       if (w.dir) claims.push({ entities: chain, dir: w.dir, negated, word, forward, strong });
       else for (const e of chain) {
@@ -450,6 +472,7 @@ export function checkSemantics(text: string, lane: Lane, scope: SemanticScope, w
         const f = byMetric.get(e.key);
         if (!f) push({ code: "unavailable", message: `Semantic guard (unavailable data): ${where} makes a directional claim about a metric for which no verified data is available in this scenario` });
         else if (strict && !claim.forward && f.direction === "flat" && flatContradiction(claim, f)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is flat` });
+        else if (strict && !claim.forward && unsupportedStrength(claim, f, scope.catalog)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText} with strong movement language the verified finding does not support` });
         else if (!claim.forward && contradicts(claim, f.direction)) push({ code: "direction", message: `Semantic guard (direction): ${where} says ${metricLabel(scope.catalog, e.key)} is ${claimText}, but the verified finding is ${f.direction}` });
       }
     }
@@ -485,6 +508,17 @@ function flatContradiction(c: Claim, f: VerifiedFact): boolean {
   if (raw === 0) return true;
   if ((c.dir === "up") !== (raw > 0)) return true;
   return c.strong && f.change_pct !== null;
+}
+
+/** G4.7 E18 (STRICT profile only; the legacy guard and its goldens are unchanged): forceful movement language about a NON-flat finding is supported only by a clearly large verified move:
+ * |change_pct| of at least five flat-thresholds (15% on the prototype catalog). A modest verified move described in forceful terms ("surged" for a small rise) is an exaggeration.
+ * Plain directional descriptions ("rose", "fell") are never strong, so they are unaffected, as is ordinary process or scheduling language, which contains no direction word and
+ * produces no claim. change_pct === null (a zero prior, which the engine labels flat) says nothing about size: only the equality and sign rules judge it, so it is skipped here,
+ * and zero-prior classification is untouched. */
+function unsupportedStrength(c: Claim, f: VerifiedFact, catalog: Catalog): boolean {
+  if (!c.strong || c.negated || c.dir === "flat" || f.direction === "flat") return false;
+  if (f.change_pct === null) return false;
+  return Math.abs(f.change_pct) < 5 * catalog.flatThresholdPct;
 }
 
 /** A claim contradicts a verified direction when it states the opposite (flat facts tolerate small up/down wording). */

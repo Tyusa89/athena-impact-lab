@@ -7,15 +7,19 @@
 //     verified fact must be cited (a sentence about two available metrics that cites one is rejected). NO EXTRAS: a cited fact whose metric is not named is rejected, so unrelated
 //     records cannot ride along as supporting ids.
 //   * A sentence that names no available metric is generic (an unverified hypothesis, a recommendation, department vocabulary such as "review the sales strategy"). It no longer may cite ANY
-//     authorized fact (C11/C12): the facts it cites must be related to what it says, by two deterministic rules, and a generic sentence that triggers neither still passes.
+//     authorized fact (C11/C12): the facts it cites must be related to what it says, by two deterministic rules.
 //       - DEPARTMENT: when it names a department (or a metric that has no verified fact, whose owning department then counts) AND the caller has at least one verified fact in a named department, at least one cited fact must belong to a named department
 //         ("review the sales strategy" may cite a Sales fact, not only a Finance fact). Extra citations beside a related one are tolerated here, unlike the metric rule above: a sentence that
 //         names no metric is too vague to say which extra fact is unrelated. When no fact exists in any named department, a related citation is impossible, the schema still requires
 //         a ref, and the citation is accepted: it then shows only that the minimum citation was supplied, not that the fact supports the sentence.
 //       - DIRECTION: when it refers to an unspecified rise or fall ("the decline", "the recent increase"), at least one cited fact for each such direction must actually have that verified
 //         direction ("the decline may reflect seasonal demand" may not cite a fact that rose).
-//     This still does not show that a cited fact supports the claim, only that it is not plainly unrelated. Wholly generic text ("gather more data") has nothing to compare and may cite any
-//     authorized fact; that remains a documented limit.
+//     This still does not show that a cited fact supports the claim, only that it is not plainly unrelated. Wholly generic text ("gather more data") has nothing to compare against: G4.7 rejects it, so any fact it cites would be arbitrary. A generic sentence that triggers neither rule but still gives a guard something to check still passes
+//     — a department, a movement reference (even a bare movement noun like "decline", or a denied, conditional or interrogative mention, which asserts no movement but names one),
+//     or a causal topic ("the root cause is unknown", judged by the causal-integrity guard). Free-floating remarks belong in the missing-evidence lane, which carries no refs.
+//     Two anchors are deliberately broader than the rule that then judges them, and both are documented limits rather than defects: a movement noun with NO determiner anchors the
+//     sentence without reaching the DIRECTION rule (which requires a determiner so verbs are not read as claims), and ANY causal-topic noun anchors it with no relatedness test at
+//     all (see CAUSAL_TOPIC). Determiner-led plurals are not in that set: "the declines" reaches the DIRECTION rule exactly as "the decline" does.
 // Citations are never rewritten, added or removed (a violation rejects the output), and `supporting_ids` stay derived from the cited facts alone. Ordinary words that equal a catalog alias ("lead the review") count as
 // mentions and fail closed.
 import type { Catalog } from "../core/catalog";
@@ -46,9 +50,26 @@ export function refsConsistent(
   );
 }
 
-/** Nouns that refer to an unspecified rise or fall ("the decline"). Only the noun readings after a determiner or a short modifier count, so verbs and ordinary words are not read as claims. */
+/** Nouns that refer to an unspecified rise or fall ("the decline", "these declines"). Only the noun readings after a determiner or a short modifier count, so verbs and ordinary words are not
+ * read as claims. The plural `s?` sits OUTSIDE the capture so the captured word stays singular for the `DOWN` lookup, and it is kept in step with `MOVE_NOUN`: a determiner-led plural
+ * ("the declines") must reach the DIRECTION rule below, not merely satisfy the G4.7 hook. */
 const GENERIC_MOVE =
-  /\b(?:the|this|that|these|recent|overall|current|ongoing|observed|apparent|latest|sharp|steep)\s+(?:\w+\s+)?(decline|drop|decrease|fall|dip|slump|downturn|downtick|contraction|increase|rise|growth|surge|jump|uptick|spike|upswing|expansion|gain)\b/g;
+  /\b(?:the|this|that|these|recent|overall|current|ongoing|observed|apparent|latest|sharp|steep)\s+(?:\w+\s+)?(decline|drop|decrease|fall|dip|slump|downturn|downtick|contraction|increase|rise|growth|surge|jump|uptick|spike|upswing|expansion|gain)s?\b/g;
+/**
+ * A causal-topic noun (cause, causes, causation, causality, causal): the sentence is about causation, so the causal-integrity guard judges it. Only noun forms count: a claimed verb
+ * ("caused") is judged as a claim, not a topic.
+ *
+ * KNOWN POLICY LIMITATION (G4.7, deliberately not narrowed): this hook is broad. Any generic sentence containing one of these nouns satisfies the G4.7 anchor test and may therefore
+ * cite an arbitrary authorized fact ("consider the cause of this." citing any fact passes), because citation precision has nothing to compare a causal topic against and defers to the
+ * causal-integrity guard, which judges the causal framing but NOT whether the cited facts are related. It is not narrowed because the alternative - demanding a department or movement
+ * hook alongside the causal topic - would reject the denied-cause framings the causal guard deliberately accepts ("the root cause is unknown."), which carry no other anchor. Tracked as
+ * an open policy question in docs/strict-evaluation.md.
+ */
+const CAUSAL_TOPIC = /\bcaus(?:e|es|ation|ality|al)\b/;
+/** Any movement noun, with or without a determiner, singular or plural: the G4.7 ANCHOR test only asks whether the sentence names a movement at all, so a denied, conditional,
+ * interrogative or bare mention ("there was no decline") still counts. Determiner-led mentions additionally go through `GENERIC_MOVE`'s DIRECTION rule; a bare mention with no
+ * determiner does not, because `GENERIC_MOVE` deliberately requires one so that verbs and ordinary words are not read as claims (see the limits note at the top of this file). */
+const MOVE_NOUN = /\b(?:decline|drop|decrease|fall|dip|slump|downturn|downtick|contraction|increase|rise|growth|surge|jump|uptick|spike|upswing|expansion|gain)s?\b/;
 const DOWN = new Set([
   "decline",
   "drop",
@@ -125,10 +146,17 @@ function genericCitationsRelated(
   )
     return false;
   const wanted = new Set<"up" | "down">();
+  let sawMove = false;
   GENERIC_MOVE.lastIndex = 0;
   for (let m = GENERIC_MOVE.exec(norm); m; m = GENERIC_MOVE.exec(norm)) {
+    sawMove = true; // a movement reference still names what the citation is about, even when denied, conditional or interrogative
     if (mentionIsNotAClaim(norm, m.index, m.index + m[0].length)) continue; // a denied, conditional or interrogative mention asserts no movement
     wanted.add(DOWN.has(m[1]!) ? "down" : "up");
   }
-  return [...wanted].every((d) => cited.some((f) => f.direction === d));
+  if (![...wanted].every((d) => cited.some((f) => f.direction === d))) return false;
+  if (!sawMove) sawMove = MOVE_NOUN.test(norm);
+  // G4.7: a sentence no guard can examine — no department or metric entity, no movement reference (not even a bare movement noun like "decline"), no causal topic — may not display supporting facts.
+  // Causal-topic sentences ("the root cause is unknown") are already judged by the causal-integrity guard, which deliberately accepts denied-cause framings.
+  if (!depts.size && !sawMove && !CAUSAL_TOPIC.test(norm)) return false;
+  return true;
 }

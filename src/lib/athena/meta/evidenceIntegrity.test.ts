@@ -9,7 +9,7 @@ import {
 } from "../prototypeAdapter";
 import { PROTOTYPE_CATALOG } from "../prototypeCatalog";
 import { PROTOTYPE_RUNTIME } from "./adapter.server";
-import { OutputSchema } from "./analysis";
+import { OutputSchema, validateAuthorizedOutput } from "./analysis";
 import { buildAuthorizedFacts, type VerifiedFact } from "./grounding";
 import type { ModelOutcome, ModelProvider } from "./provider";
 import { refsConsistent } from "./refConsistency";
@@ -19,8 +19,8 @@ import { semanticScope as facadeScope } from "./semanticGuards";
 import { runStrictAnalysis } from "./strictRuntime";
 import { validateStrictOutput, type DiagnosticCategory } from "./strictValidation";
 
-// G4.6: offline regression tests for evidence-integrity hardening: generic citation integrity (C11/C12), flat-direction consistency (F5), explicit discoverability (F2) and characterization of the
-// undecided policies E17/E18. Synthetic data and fake providers only; the vitest global fetch is a tripwire. No test sends a request to Meta.
+// G4.6/G4.7: offline regression tests for evidence-integrity hardening: generic citation integrity (C11/C12), flat-direction consistency (F5), explicit discoverability (F2), G4.7 citation
+// precision, E17 empty-response rejection and E18 size-judged strong language. Synthetic data and fake providers only; the vitest global fetch is a tripwire. No test sends a request to Meta.
 const tripwire = vi.fn(() => {
   throw new Error("network call attempted");
 });
@@ -235,8 +235,11 @@ describe("C11/C12: generic statements may not cite unrelated facts", () => {
     };
     expect(OutputSchema.safeParse(smuggled).success).toBe(false);
   });
-  it("documented limits stay as they are: wholly generic text may cite any fact, and a role with no related fact is not asked for the impossible", async () => {
-    expect((await verdict(reply({ r: [R("Gather more data.", "F-revenue")] }))).state).toBe("ok");
+  it("G4.7: wholly generic text may no longer cite any fact, and a role with no related fact is still not asked for the impossible", async () => {
+    expect(await verdict(reply({ r: [R("Gather more data.", "F-revenue")] }))).toEqual({
+      state: "rejected",
+      cats: ["relevance"],
+    });
     // the finance role has no Sales fact, so a sentence about sales cannot cite a related one (the schema still requires a ref)
     expect(
       (
@@ -424,7 +427,10 @@ describe("F2: strict reasoning requires an explicit discoverability grant", () =
     expect(r.provider.calls).toBe(0);
   });
   it("an explicit EMPTY grant is a valid declaration and runs", async () => {
-    const r = await run(reply({}), { role: "marketing", policy: declared([]) });
+    const r = await run(reply({ g: ["Lead counts and conversion by source."] }), {
+      role: "marketing",
+      policy: declared([]),
+    });
     expect(r.result.state).toBe("ok");
     expect(r.provider.calls).toBe(1);
   });
@@ -462,7 +468,7 @@ describe("F2: strict reasoning requires an explicit discoverability grant", () =
     ).toThrow(TypeError);
     expect(
       validateStrictOutput(
-        reply({}),
+        reply({ g: ["Lead counts and conversion by source."] }),
         a.authorized,
         a.withheld,
         PROTOTYPE_RUNTIME.analysis,
@@ -547,9 +553,9 @@ describe("F2: strict reasoning requires an explicit discoverability grant", () =
 });
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------ E17 / E18
-describe("E17/E18: undecided policies are characterized, not changed", () => {
-  it("E17: an all-empty structured output is accepted by the validator today (schema permits empty lanes); it scores as the weakest reasoning, and is never a security rejection", async () => {
-    expect(await verdict(reply({}))).toEqual({ state: "ok", cats: [] });
+describe("E17/E18: decided policies (G4.7) — empty responses are rejected, strong language is judged by size", () => {
+  it("E17: an all-empty structured output is rejected by strict validation (the schema still permits empty lanes; the score still rates it the weakest reasoning)", async () => {
+    expect(await verdict(reply({}))).toEqual({ state: "rejected", cats: ["empty"] });
     const empty = { interpretations: [], missing_evidence: [], recommendations: [] };
     expect(OutputSchema.safeParse(empty).success).toBe(true);
     expect(evaluateReasoning(empty, ["F-leads", "F-cac", "F-conversion_rate"])).toMatchObject({
@@ -561,7 +567,86 @@ describe("E17/E18: undecided policies are characterized, not changed", () => {
       "ok",
     );
   });
-  it("E18: qualitative magnitude on a NON-flat finding is accepted today ('rose sharply'), while numeric and quantified magnitude stay rejected", async () => {
+  // MEDIUM-1 (G4.7b): the E17 non-empty rule counted ARRAY LENGTH, so a lane filled with blank, punctuation-only or placeholder text satisfied it. `missing_evidence` carries no refs
+  // and no other guard inspects it, so that was the one lane where a content-free response could be accepted.
+  it("G4.7b E17: a junk-only response does not satisfy the non-empty reasoning requirement (negative)", async () => {
+    for (const g of [
+      [" "],
+      ["\t\n "],
+      ["."],
+      ["..."],
+      ["?"],
+      ["-"],
+      ["---"],
+      ["n/a"],
+      ["N/A."],
+      ["n.a."],
+      ["na"],
+      ["none"],
+      ["None."],
+      ["nil"],
+      ["null"],
+      ["unknown"],
+      ["TBD"],
+      ["todo"],
+      ["nothing"],
+      ["not applicable"],
+      ["no data"],
+      ["​​"], // zero-width spaces
+      [" ", ".", "n/a"], // several junk entries are still junk
+    ])
+      expect(await verdict(reply({ g })), JSON.stringify(g)).toEqual({
+        state: "rejected",
+        cats: ["empty"],
+      });
+    // a digit-only entry never reaches this check: the pre-existing numeral rule rejects it first, and still does
+    expect(await verdict(reply({ g: ["123"] }))).toEqual({ state: "rejected", cats: ["numeral"] });
+  });
+  it("G4.7b E17: legitimate missing-evidence statements still pass, including terse ones (positive)", async () => {
+    for (const g of [
+      ["Lead counts and conversion by source."],
+      ["Staffing."], // a single real word is content
+      ["CAC by channel."],
+      ["Spend by campaign."],
+      ["No data exists for channel-level lead sources."], // starts like a placeholder but says something
+      ["None of the campaign exports cover the prior period."],
+      ["Unknown lead sources broken out by region."],
+    ])
+      expect((await verdict(reply({ g }))).state, JSON.stringify(g)).toBe("ok");
+  });
+  it("G4.7b E17: one meaningful entry anywhere is enough, in any lane (mixed valid and invalid)", async () => {
+    // a junk gap beside a real gap
+    expect((await verdict(reply({ g: [".", "Lead quality scores by source."] }))).state).toBe("ok");
+    expect((await verdict(reply({ g: ["Lead quality scores by source.", "n/a"] }))).state).toBe("ok");
+    // the meaningful entry lives in another lane while the gap lane is junk
+    expect(
+      (await verdict(reply({ i: [I("Lead volume rose.", "F-leads")], g: ["n/a"] }))).state,
+    ).toBe("ok");
+    expect(
+      (
+        await verdict(
+          reply({ r: [R("Compare lead volume by source.", "F-leads")], g: [" "] }),
+        )
+      ).state,
+    ).toBe("ok");
+  });
+  it("G4.7b E17: the rule is strict-only and changes no other safeguard", async () => {
+    // the legacy validator has no non-empty rule at all: a junk-only output is still accepted there
+    const junk = { interpretations: [], missing_evidence: [" ", "n/a"], recommendations: [] };
+    expect(OutputSchema.safeParse(junk).success).toBe(true); // the schema is unchanged
+    const a = authorizeDemo({ scenarioId: "baseline", roleId: "exec" });
+    expect(
+      validateAuthorizedOutput(
+        JSON.stringify(junk),
+        a.authorized,
+        a.withheld,
+        PROTOTYPE_RUNTIME.analysis,
+      ).ok,
+    ).toBe(true);
+    // a junk gap does not mask a real violation in another lane: the stronger rejection still fires
+    expect((await verdict(reply({ i: [I("Revenue doubled.", "F-revenue")], g: ["n/a"] }))).cats).toContain("magnitude");
+  });
+  it("E18: qualitative magnitude supported by a large verified move stays accepted, while numeric and quantified magnitude stay rejected", async () => {
     for (const t of [
       "Lead volume rose sharply.",
       "Lead volume rose dramatically.",
@@ -578,9 +663,125 @@ describe("E17/E18: undecided policies are characterized, not changed", () => {
       expect((await verdict(reply({ i: [I(t, "F-leads")] }))).cats, t).toContain("magnitude");
     }
   });
-  it("E18 is not a loophole for flat findings: the same qualitative language is rejected there (F5), which is the only policy change", () => {
+  it("E18 is not a loophole for flat findings: the same qualitative language is rejected there (F5)", () => {
     expect(issues(SMALL_UP, "Lead volume rose sharply.")).toEqual(["direction"]);
     expect(issues(fact(100, 150, 50), "Lead volume rose sharply.")).toEqual([]);
+  });
+  it("G4.7 citation precision: a sentence no guard can examine is rejected in both citing lanes, while hooked sentences still pass", async () => {
+    for (const t of ["Gather more data.", "Consider scheduling a planning workshop."]) {
+      expect(await verdict(reply({ i: [I(t, "F-revenue")] })), `${t} (interpretation)`).toEqual({
+        state: "rejected",
+        cats: ["relevance"],
+      });
+      expect(await verdict(reply({ r: [R(t, "F-revenue")] })), `${t} (recommendation)`).toEqual({
+        state: "rejected",
+        cats: ["relevance"],
+      });
+    }
+    // hooks that still pass: an exempted movement reference, a causal topic, a department
+    expect(
+      (await verdict(reply({ i: [I("There was no decline in the period.", "F-leads")] }))).state,
+    ).toBe("ok");
+    expect(
+      (await verdict(reply({ i: [I("The root cause is unknown.", "F-revenue")] }))).state,
+    ).toBe("ok");
+    expect(
+      (await verdict(reply({ r: [R("Review the sales strategy.", "F-conversion_rate")] }))).state,
+    ).toBe("ok");
+  });
+  it("G4.7 E18: strong language about a modest non-flat move is rejected; plain descriptions and large moves are accepted", () => {
+    const modestUp = fact(100, 106, 6);
+    const modestDown = fact(100, 94, -6);
+    expect(modestUp.direction).toBe("up");
+    expect(modestDown.direction).toBe("down");
+    for (const t of [
+      "Lead volume surged.",
+      "Lead volume rose sharply.",
+      "Lead volume grew dramatically.",
+    ])
+      expect(issues(modestUp, t), t).toEqual(["direction"]);
+    for (const t of ["Lead volume plunged.", "Lead volume fell sharply."])
+      expect(issues(modestDown, t), t).toEqual(["direction"]);
+    for (const t of [
+      "Lead volume rose.",
+      "Lead volume rose slightly.",
+      "Lead volume grew.",
+      "Lead volume increased modestly.",
+    ])
+      expect(issues(modestUp, t), t).toEqual([]);
+    for (const t of ["Lead volume fell.", "Lead volume declined.", "Lead volume dropped slightly."])
+      expect(issues(modestDown, t), t).toEqual([]);
+    // a large verified move supports strong language
+    for (const t of ["Lead volume surged.", "Lead volume rose sharply."])
+      expect(issues(fact(100, 150, 50), t), t).toEqual([]);
+    // the legacy profile is untouched: it still tolerates strong wording on a modest move
+    for (const t of ["Lead volume surged.", "Lead volume rose sharply."])
+      expect(issues(modestUp, t, false), t).toEqual([]);
+  });
+  it("G4.7 E18 end to end: a modest verified move cannot be described in forceful terms", async () => {
+    // quality-only exec: revenue -4.7%; baseline exec: closed deals -14.8% (just under the 15% bar)
+    expect(
+      await verdict(reply({ i: [I("Revenue plunged.", "F-revenue")] }), { scenario: "quality-only" }),
+    ).toEqual({ state: "rejected", cats: ["direction"] });
+    expect(
+      (await verdict(reply({ i: [I("Revenue fell.", "F-revenue")] }), { scenario: "quality-only" }))
+        .state,
+    ).toBe("ok");
+    expect(await verdict(reply({ i: [I("Closed deals plunged.", "F-closed_deals")] }))).toEqual({
+      state: "rejected",
+      cats: ["direction"],
+    });
+    // just above the bar, strong language stays accepted: acquisition cost +19.5%
+    expect((await verdict(reply({ i: [I("Acquisition cost surged.", "F-cac")] }))).state).toBe(
+      "ok",
+    );
+  });
+  // G4.7 review follow-up: E18 made the `strong` flag load-bearing for every non-flat metric under the bar, which exposed the +-24-character intensifier window. An intensifier that
+  // belongs to a NEIGHBOURING predicate must not condemn this claim. "cac" is a catalog alias, so both halves of these sentences really are bound to their own metric.
+  const cacFact = (prior: number, current: number, pct: number | null): VerifiedFact => ({
+    ...fact(prior, current, pct),
+    fact_id: "F-cac",
+    metric: "cac",
+    unit: "USD",
+  });
+  const CAC_BIG_DOWN = cacFact(100, 50, -50); // large: "sharply" is truthful about cac
+  const pairIssues = (text: string, leads: VerifiedFact, cac = CAC_BIG_DOWN, strict = true) =>
+    checkSemantics(
+      text,
+      "interpretation",
+      genericScope([], [leads, cac], PROTOTYPE_CATALOG, {
+        discoverable: ["leads", "cac"],
+        strictMentions: strict,
+      }),
+    ).map((i) => i.code);
+  it("G4.7 E18: an intensifier binds to its own predicate, not across a coordinator (regression)", () => {
+    const modestUp = fact(100, 106, 6); // non-flat but under the 15% bar
+    // each half is truthful on its own
+    expect(pairIssues("Lead volume rose.", modestUp)).toEqual([]);
+    expect(pairIssues("Cac fell sharply.", modestUp)).toEqual([]);
+    // ...so the conjunction must stay accepted too: "sharply" modifies "fell" (cac), not "rose" (leads)
+    expect(pairIssues("Lead volume rose and cac fell sharply.", modestUp)).toEqual([]);
+    expect(pairIssues("Cac fell sharply and lead volume rose.", modestUp)).toEqual([]);
+    expect(pairIssues("Lead volume rose and cac sharply fell.", modestUp)).toEqual([]);
+    // the intensifier still binds inside its OWN predicate, on either side of the direction word
+    expect(pairIssues("Lead volume rose sharply and cac fell.", modestUp)).toEqual(["direction"]);
+    expect(pairIssues("Lead volume sharply rose and cac fell.", modestUp)).toEqual(["direction"]);
+    // unchanged: a strong VERB is bound by the word itself, never by the window
+    expect(pairIssues("Lead volume surged and cac fell.", modestUp)).toEqual(["direction"]);
+    // a coordinator joining an ENTITY CHAIN is not a predicate boundary: both subjects keep the strong claim
+    expect(
+      pairIssues("Lead volume and cac rose sharply.", modestUp, cacFact(100, 106, 6)),
+    ).toEqual(["direction", "direction"]);
+    // the legacy profile is untouched either way
+    expect(pairIssues("Lead volume rose and cac fell sharply.", modestUp, CAC_BIG_DOWN, false)).toEqual([]);
+    expect(pairIssues("Lead volume rose sharply and cac fell.", modestUp, CAC_BIG_DOWN, false)).toEqual([]);
+  });
+  it("G4.7 E18: the binding rule does not weaken F5, which still rejects a flat finding's OWN forceful wording", () => {
+    // the intensifier belongs to the cac predicate, so the flat leads claim is a plain (allowed) description of a small raw rise
+    expect(pairIssues("Lead volume rose and cac fell sharply.", SMALL_UP)).toEqual([]);
+    // ...but a flat finding with the intensifier in its own predicate is still rejected
+    expect(pairIssues("Lead volume rose sharply and cac fell.", SMALL_UP)).toEqual(["direction"]);
+    expect(issues(SMALL_UP, "Lead volume rose sharply.")).toEqual(["direction"]);
   });
   it("the G4.5 reasoning score stays a non-gating metric: a weak reply that the validator accepts is still accepted", async () => {
     const weak = reply({

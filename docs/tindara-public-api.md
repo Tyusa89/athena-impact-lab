@@ -120,24 +120,63 @@ the UI genuinely reaches) is also detected, with the unmutated graph asserted cl
 These complement the pre-existing boundary tests, which still pass unchanged: `core/importBoundary.test.ts`, `meta/engineBoundary.test.ts`
 and `meta/providers/importBoundary.test.ts`.
 
-### Measured: three pure modules already reach the browser bundle
+### Static reachability is not bundle inclusion — measured
 
-Building the transitive check revealed that `core/access.ts`, `core/identity.ts` and `prototypeAdapter.ts` are **already** reachable from the
-client on `main`, by paths no client file names:
+Two different properties, established by two different layers:
+
+| Layer | Establishes | When it runs |
+|---|---|---|
+| **Static reachability** | over-approximation: what a client entry *could* pull in | always |
+| **Bundle emission** | ground truth after tree shaking, read from sourcemap `sources` | when `vite build --sourcemap` artifacts exist |
+
+The transitive scan found `core/access.ts`, `core/identity.ts` and `prototypeAdapter.ts` statically reachable, by paths no client file names:
 
 ```
-src/routes/index.tsx      → athena/engine.ts    → core/facts.ts         → core/access.ts
-src/components/MetaPanel.tsx → meta/contract.ts → prototypeAdapter.ts   → core/identity.ts
+src/routes/index.tsx         → athena/engine.ts → core/facts.ts       → core/access.ts
+src/components/MetaPanel.tsx → meta/contract.ts → prototypeAdapter.ts → core/identity.ts
 ```
 
-`core/facts.ts` (used by the in-browser deterministic demo engine) imports the *value* `assertAuthorized` from `core/access`, and `MetaPanel`
-reaches `prototypeAdapter` through the `meta/contract` facade for the demo's role and scenario lists. This is **pre-existing and not a Phase 0
-regression**, and it is not treated as a failure: all three are pure, dependency-free modules holding no secret, credential or evidence, and
-the security model never rested on their absence from the client — authorization happens on the server over the server's own evidence. The set
-is **pinned** instead, so it cannot grow without review, and the direct-import guard in `meta/authorization.test.ts` is unchanged.
+`core/facts.ts` imports the *value* `assertAuthorized`, and `MetaPanel` reaches `prototypeAdapter` through the `meta/contract` facade.
+**But none of them is emitted.** `vite build --sourcemap` produces four client chunks, and their `sources` arrays contain exactly:
 
-Worth noting for a later phase, but out of scope here: the `meta/contract` facade pulls the whole validator into the client chunk, which is
-avoidable bundle surface.
+```
+athena/approvals.ts   athena/core/catalog.ts   athena/core/facts.ts   athena/data.ts
+athena/engine.ts      athena/meta.functions.ts athena/meta/providers/muse.ts
+athena/meta/requestGate.ts  athena/prototypeCatalog.ts  athena/provider.ts
+athena/workbench/{graphLayout,view,workbench.functions}.ts
+```
+
+`core/access.ts`, `core/identity.ts`, `prototypeAdapter.ts` and `meta/contract.ts` are **absent** — rollup eliminates them because no retained
+path uses the imported symbols. So this is neither a leak nor an exemption: the strict forbidden-module rule covers server-only modules and
+currently holds with **zero** grandfathered entries, and these three are pinned separately as a *measured* "statically reachable, not emitted"
+baseline so the gap cannot widen unreviewed.
+
+### Verified absent from the emitted client assets
+
+| Marker | Result |
+|---|---|
+| `process.env`, `sk-`, `Bearer`, `api_key` | absent — no client code reads an environment |
+| `Authorization failed`, `AuthorizationError` | absent — no identity implementation |
+| `simulated-demo-role-claim`, `demo-role:`, `SERVER_ROLE_WORKSPACES` | absent — no identity verifier, no role allowlist |
+| `did not pass validation`, `UNAVAILABLE_METRICS`, `VERIFIED_FACTS` | absent — no strict path, no scoped prompt |
+| `already_imported`, `conflicts_with_existing` | absent — no ledger/importer |
+| `authorizeEvidence`, `createIdentityBoundary`, `runStrictAnalysis` | absent |
+| any `.server.ts` module | absent |
+
+Two **permitted** occurrences, both UI label text rather than values: `META_MODEL_API_KEY` and `META_MODEL_ENABLED` appear inside MetaPanel's
+status strings ("Server key META_MODEL_API_KEY configured"). The env-var *name* is not the value, and `process.env` being absent is what proves
+no client code reads an environment. The only URLs in the bundle are `fonts.googleapis.com` and `react.dev/errors/`; the Meta endpoint constant
+is not emitted.
+
+`meta.functions.ts` and `workbench.functions.ts` *are* emitted — as client RPC stubs. Their handler bodies, and everything the handlers
+dynamically import, are stripped, which the absence of `process.env` and of every `.server.ts` module confirms.
+
+**What the browser legitimately does hold:** `data.ts` (the bundled **synthetic** demo dataset) and the local deterministic demo engine, because
+the prototype's default analysis runs in the browser by design. That means client-side role filtering is cosmetic — which the README already
+states ("Role filtering is simulated, not authorization"). No real or privileged evidence exists in this repository.
+
+Worth noting for a later phase, out of scope here: the `meta/contract` facade is statically reachable from `MetaPanel`, and only tree shaking
+keeps it out of the chunk. That is a thin margin to rely on; importing the generic modules directly would remove the dependency on it.
 
 ## Not implemented
 

@@ -371,11 +371,76 @@ describe("the bundle-level checker works (synthetic, always runs)", () => {
 const BUILD_DIR = ".output/public";
 const builtJs = () => walk(BUILD_DIR).filter((f) => f.endsWith(".js"));
 const builtMaps = () => walk(BUILD_DIR).filter((f) => f.endsWith(".js.map"));
-const haveMaps = () => builtMaps().length > 0;
 
-// Requires `vite build --sourcemap` to have run (`.output/` is gitignored, so a plain `vitest run` skips this). The static checks above always
-// run; this section is the stronger, bundle-level confirmation of the same policy.
-describe.skipIf(!haveMaps())("the emitted client bundle contains nothing privileged", () => {
+/**
+ * When is bundle verification EXPECTED? Whenever a build exists (`.output/public` present), or when CI forces it with
+ * `TINDARA_VERIFY_BUNDLE=1`. Once expected, it FAILS CLOSED: absent, unreadable, malformed or STALE artifacts are failures, never skips.
+ * `bun run verify:bundle` (vite build --sourcemap && this file) is the one command that guarantees a fresh build plus verification.
+ * With no build and no flag the section is skipped — but `assertFreshArtifacts` itself is unit-tested below, so the fail-closed behaviour is
+ * regression-covered either way.
+ */
+const verificationExpected = () => process.env["TINDARA_VERIFY_BUNDLE"] === "1" || existsSync(BUILD_DIR);
+
+/** Fail closed. Returns the sourcemap paths; throws a directive message otherwise. `newestSource` lets the caller inject a clock for testing. */
+export function assertFreshArtifacts(maps: readonly string[], js: readonly string[], read: Read, mtime: (f: string) => number, newestSource: number): string[] {
+  if (js.length === 0) throw new Error("Bundle verification expected but no client JS was emitted; run `vite build --sourcemap`.");
+  if (maps.length === 0) throw new Error("Bundle verification expected but no sourcemaps were emitted; run `vite build --sourcemap` (not a plain build).");
+  for (const f of maps) {
+    const raw = read(f);
+    if (raw === null) throw new Error(`Sourcemap unreadable: ${f}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`Sourcemap malformed (not JSON): ${f}`);
+    }
+    const sources = (parsed as { sources?: unknown }).sources;
+    if (!Array.isArray(sources) || sources.length === 0 || !sources.every((s) => typeof s === "string"))
+      throw new Error(`Sourcemap malformed (no usable "sources" array): ${f}`);
+  }
+  const oldestArtifact = Math.min(...[...maps, ...js].map(mtime));
+  if (newestSource > oldestArtifact) throw new Error("Build artifacts are STALE (a source file is newer); re-run `vite build --sourcemap`.");
+  return [...maps];
+}
+
+/** Newest mtime among the sources that actually affect the bundle. Generated and test files are excluded: the router plugin rewrites
+ * routeTree.gen.ts during the build (so it is always newer than the artifacts), and tests are never bundled. */
+function newestSourceMtime(): number {
+  const files = walk("src").filter((f) => /\.(ts|tsx|css)$/.test(f) && !/\.test\.|routeTree\.gen\.ts$/.test(f));
+  return Math.max(...files.map((f) => statSync(f).mtimeMs));
+}
+
+describe("the fail-closed artifact check behaves correctly (synthetic, always runs)", () => {
+  const ok = JSON.stringify({ sources: ["../../src/lib/athena/engine.ts"] });
+  const at = (t: number) => () => t;
+  it("accepts a fresh, well-formed set", () => {
+    expect(assertFreshArtifacts(["m.js.map"], ["a.js"], fromMap({ "m.js.map": ok }), at(100), 50)).toEqual(["m.js.map"]);
+  });
+  it("fails when no JS, or no sourcemap, was emitted", () => {
+    expect(() => assertFreshArtifacts([], [], fromMap({}), at(100), 50)).toThrow(/no client JS/);
+    expect(() => assertFreshArtifacts([], ["a.js"], fromMap({}), at(100), 50)).toThrow(/no sourcemaps/);
+  });
+  it("fails when a sourcemap is unreadable", () => {
+    expect(() => assertFreshArtifacts(["m.js.map"], ["a.js"], () => null, at(100), 50)).toThrow(/unreadable/);
+  });
+  it("fails when a sourcemap is malformed", () => {
+    expect(() => assertFreshArtifacts(["m.js.map"], ["a.js"], fromMap({ "m.js.map": "not json" }), at(100), 50)).toThrow(/malformed \(not JSON\)/);
+    for (const bad of ['{"sources":[]}', '{"sources":"x"}', "{}", '{"sources":[1,2]}'])
+      expect(() => assertFreshArtifacts(["m.js.map"], ["a.js"], fromMap({ "m.js.map": bad }), at(100), 50), bad).toThrow(/no usable "sources"/);
+  });
+  it("fails when the artifacts are STALE relative to sources", () => {
+    expect(() => assertFreshArtifacts(["m.js.map"], ["a.js"], fromMap({ "m.js.map": ok }), at(100), 101)).toThrow(/STALE/);
+    // equal timestamps are not stale (a source written in the same millisecond as the build)
+    expect(() => assertFreshArtifacts(["m.js.map"], ["a.js"], fromMap({ "m.js.map": ok }), at(100), 100)).not.toThrow();
+  });
+});
+
+// Fail-closed: when a build exists (or CI sets TINDARA_VERIFY_BUNDLE=1) every check below must pass; nothing here is skipped silently.
+describe.skipIf(!verificationExpected())("the emitted client bundle contains nothing privileged", () => {
+  it("the artifacts are present, readable, well-formed and FRESH (fails closed otherwise)", () => {
+    expect(() => assertFreshArtifacts(builtMaps(), builtJs(), realRead, (f) => statSync(f).mtimeMs, newestSourceMtime())).not.toThrow();
+  });
+
   it("found real build artifacts to inspect (not vacuous)", () => {
     expect(builtMaps().length).toBeGreaterThan(0);
     const emitted = emittedClientModules(builtMaps(), realRead);
@@ -396,6 +461,39 @@ describe.skipIf(!haveMaps())("the emitted client bundle contains nothing privile
 
   it("emits no secret, no identity-verifier implementation and no server-only behaviour", () => {
     expect(markersFound(builtJs(), realRead)).toEqual([]);
+  });
+
+  /** MetaPanel imports the single string constant META_MODEL from the `meta/contract` facade, and that facade re-exports the WHOLE validator
+   * (`export * from "./analysis"`), the demo role allowlist and `RequestSchema`. Nothing of that is emitted: only `providers/muse.ts`, the
+   * constant's actual origin, survives. So the convenience import introduces no secret, no privileged logic and no extra dependency — but it
+   * is tree shaking, not module structure, that achieves it (recorded as a limitation; importing from `./providers/muse` directly would
+   * remove the reliance). */
+  it("the meta/contract facade contributes no validator, no demo allowlist and no extra dependency", () => {
+    const emitted = emittedClientModules(builtMaps(), realRead);
+    for (const f of ["src/lib/athena/meta/contract.ts", "src/lib/athena/meta/analysis.ts", "src/lib/athena/meta/semantic.ts",
+      "src/lib/athena/meta/grounding.ts", "src/lib/athena/meta/refConsistency.ts", "src/lib/athena/meta/causalPolicy.ts",
+      "src/lib/athena/meta/semanticGuards.ts", "src/lib/athena/meta/textSafety.ts"])
+      expect(emitted, f).not.toContain(f);
+    // the only meta modules in the browser are the request gate and the provider adapter that owns META_MODEL
+    expect(emitted.filter((f) => f.startsWith("src/lib/athena/meta/"))).toEqual([
+      "src/lib/athena/meta/providers/muse.ts", "src/lib/athena/meta/requestGate.ts",
+    ]);
+    // validator and schema internals, and zod (reachable via RequestSchema), are absent
+    expect(markersFound(builtJs(), realRead, ["Semantic guard", "refsConsistent", "requires_human_approval", "ZodError", "safeParse", "META_ENDPOINT"])).toEqual([]);
+    // zod is reachable through `RequestSchema` but is not a bundled MODULE. (Checked on the sourcemaps' `sources` paths: a loose text match
+    // would false-positive on `sourcesContent`, where an unrelated @tanstack/router-core file happens to mention zod.)
+    const bundledPaths = builtMaps().flatMap((f) => {
+      try {
+        const s = (JSON.parse(realRead(f) ?? "") as { sources?: unknown }).sources;
+        return Array.isArray(s) ? s.filter((x): x is string => typeof x === "string") : [];
+      } catch {
+        return [];
+      }
+    });
+    expect(bundledPaths.length).toBeGreaterThan(0); // the parse worked, so the filter below is meaningful
+    expect(bundledPaths.filter((s) => /(?:^|\/)zod(?:\/|$)|node_modules\/zod/.test(s))).toEqual([]);
+    // what DOES survive from the facade's chain is the model name string the UI displays, which is not a secret
+    expect(markersFound(builtJs(), realRead, ["muse-spark"])).toEqual(["muse-spark"]);
   });
 
   it("the server-function modules are emitted only as client stubs: their handler bodies are gone", () => {

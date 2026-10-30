@@ -34,8 +34,10 @@
 //     verifier can return `assurance: "verified"` while validating nothing. `allowSimulatedIdentity: false` enforces only that the adapter
 //     CLAIMED "verified"; it cannot check that a credential was really validated. Real identity assurance is Phase 1 and must be enforced
 //     outside this module.
-//   * THE IMPORT-CLOSURE TESTS ARE STATIC SCANS. They follow relative and `@/`-aliased specifiers and literal dynamic imports; they cannot
-//     follow a computed specifier, a re-export through a bare package, or a module added under a path their entry list does not cover.
+//   * THE IMPORT-CLOSURE TESTS ARE STATIC SCANS, and they over-approximate: they follow relative and `@/`-aliased specifiers and literal
+//     dynamic imports, but cannot follow a computed specifier, a re-export through a bare package, an alias other than `@/`, or a module under
+//     a path their entry list does not cover. Because a statically reachable module may still be dropped by the bundler, a second, bundle-level
+//     layer reads the emitted sourcemaps for ground truth (`./browserBoundary.test.ts`, run by `bun run verify:bundle`).
 //   * TYPE-ONLY EXPORTS DO NOT EXIST AT RUNTIME, so they cannot be enumerated from the imported namespace. They are pinned by parsing this
 //     file's `export type { ... }` blocks instead (see ./publicSurface.test.ts).
 //

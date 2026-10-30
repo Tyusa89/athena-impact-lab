@@ -127,7 +127,14 @@ Two different properties, established by two different layers:
 | Layer | Establishes | When it runs |
 |---|---|---|
 | **Static reachability** | over-approximation: what a client entry *could* pull in | always |
-| **Bundle emission** | ground truth after tree shaking, read from sourcemap `sources` | when `vite build --sourcemap` artifacts exist |
+| **Bundle emission** | ground truth after tree shaking, read from sourcemap `sources` | whenever a build exists, or `TINDARA_VERIFY_BUNDLE=1` |
+
+Run both with one command: **`bun run verify:bundle`** (`vite build --sourcemap && vitest run src/lib/tindara/browserBoundary.test.ts`).
+Once bundle verification is expected, it **fails closed** — absent, unreadable, malformed or **stale** artifacts are failures, never skips.
+Verified by probe: deleting the sourcemaps fails with *"no sourcemaps were emitted"*; corrupting one fails with *"Sourcemap malformed (not
+JSON)"*; touching a source file fails with *"Build artifacts are STALE"*. The staleness comparison excludes `routeTree.gen.ts` (the router
+plugin rewrites it during the build) and test files (never bundled). With no build and no flag the section is skipped, but
+`assertFreshArtifacts` is itself unit-tested against synthetic input, so the fail-closed logic stays regression-covered either way.
 
 The transitive scan found `core/access.ts`, `core/identity.ts` and `prototypeAdapter.ts` statically reachable, by paths no client file names:
 
@@ -175,8 +182,32 @@ dynamically import, are stripped, which the absence of `process.env` and of ever
 the prototype's default analysis runs in the browser by design. That means client-side role filtering is cosmetic — which the README already
 states ("Role filtering is simulated, not authorization"). No real or privileged evidence exists in this repository.
 
-Worth noting for a later phase, out of scope here: the `meta/contract` facade is statically reachable from `MetaPanel`, and only tree shaking
-keeps it out of the chunk. That is a thin margin to rely on; importing the generic modules directly would remove the dependency on it.
+### Investigated: what the `meta/contract` facade contributes
+
+`MetaPanel.tsx:6` imports one string constant — `META_MODEL`, the model name it displays — from the `meta/contract` facade. That facade
+re-exports a great deal more: `export * from "./analysis"` (the whole validator), plus `SERVER_ROLE_WORKSPACES`,
+`SYNTHETIC_SCENARIO_ALLOWLIST`, `workspacesForRole` and `RequestSchema` from the prototype adapter, and it imports `authorizeDemo`,
+`PROTOTYPE_CONTEXT` and `prototypeDiscoverable`. So a one-symbol convenience import makes the validator, the demo role allowlist, the
+authorization core and `zod` all *statically reachable* from the browser.
+
+**Measured contribution: nothing.** Only `providers/muse.ts` — the constant's actual origin — is emitted. Confirmed on the build output:
+
+| Checked | Result |
+|---|---|
+| `meta/contract.ts`, `meta/analysis.ts`, `semantic.ts`, `grounding.ts`, `refConsistency.ts`, `causalPolicy.ts`, `semanticGuards.ts`, `textSafety.ts` | **not emitted** |
+| Only `meta/*` modules emitted | `providers/muse.ts`, `requestGate.ts` |
+| `Semantic guard`, `refsConsistent`, `requires_human_approval`, `ZodError`, `safeParse`, `META_ENDPOINT` | absent from client JS |
+| `zod` as a bundled module path | absent |
+| Secrets / privileged logic / extra dependencies introduced | **none** |
+
+So it introduces no secret, no privileged logic and no unwanted dependency. Two benign survivors: the string `muse-spark-1.3` (the model name
+the UI shows) and the field names `supporting_ids` / `interpretations`, which are MetaPanel's JSX reading the server's response, not validator
+code.
+
+**Remaining limitation** (recorded, not fixed — fixing it is out of this PR's scope): it is *tree shaking*, not module structure, that keeps
+all of the above out of the browser. That is a thin margin to depend on, and a future bundler or config change could alter it. Having
+`MetaPanel` import `META_MODEL` from `./providers/muse` directly, and the facade's other consumers import the generic modules, would remove
+the reliance. The bundle-level test above is what makes a regression here visible rather than silent.
 
 ## Not implemented
 
@@ -202,7 +233,8 @@ Recorded so they are not mistaken for guarantees. None of these is fixed by Phas
    consumer-supplied verifier can return `assurance: "verified"` while validating nothing. `allowSimulatedIdentity: false` enforces only that
    the adapter **claimed** `"verified"` — it cannot check that a credential was really validated. **Real identity assurance is Phase 1 and must
    be implemented and enforced outside this module.** Until then, treat `"verified"` as an unverified assertion by the deployment's own code.
-4. **The import-closure tests are static scans**, with known blind spots: a computed specifier (`import(someVar)`), a re-export laundered
+4. **The import-closure tests are static scans** that over-approximate (a reachable module may still be dropped by the bundler — hence the
+   second, bundle-level layer), with known blind spots now pinned as tests: a computed specifier (`import(someVar)`), a re-export laundered
    through a bare package, a path alias other than `@/`, and any client entry outside the globs the test walks. A new top-level client entry
    (or a new alias in `vite.config.ts`) would need the entry list updated; nothing detects that automatically.
 5. **Type-only exports are now pinned** by parsing `export type { … }` blocks, which is a source-level pin, not a type-system one: it detects a

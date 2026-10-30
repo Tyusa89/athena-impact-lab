@@ -140,6 +140,12 @@ describe("an independent consumer can configure the engine from the public entry
 
 describe("the engine's safeguards still apply to an external consumer", () => {
   it("enforces tenant isolation itself: the foreign row in the same store is never authorized", async () => {
+    // The store REALLY offers the foreign row (and the policy's `permits` would accept it, since it only checks the department), so the
+    // assertions below prove the engine FILTERED it — not that it was absent or that the policy happened to exclude it.
+    const offered = store.candidates(undefined as never, "service-desk");
+    expect(offered.map((e) => e.id)).toContain("R-X");
+    expect(policy.evidenceScope({ tenantId: TENANT, actorId: "svc-1" } as TrustedContext).permits(FOREIGN_ROW)).toBe(true);
+
     const r = await runImpactAnalysis(ok, runtime(), MODEL);
     expect(r.state).toBe("ok");
     if (r.state !== "ok") return;

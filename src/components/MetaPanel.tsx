@@ -98,7 +98,7 @@ export function MetaPanel({ scenarioId, roleId, workspaces, analysis }: { scenar
           {result?.state === "ok" && (
             <div className="mt-2 space-y-3 text-xs">
               <section aria-label="Verified findings">
-                <h4 className="font-semibold text-success">Verified findings <span className="font-normal text-muted-foreground">· computed by Athena from authorized records · no model text</span></h4>
+                <h4 className="font-semibold text-success">Verified findings <span className="font-normal text-muted-foreground">· computed by Tindara from authorized records · no model text</span></h4>
                 <ul className="mt-1 space-y-1">
                   {result.findings.map((f) => (
                     <li key={f.fact_id} className="rounded border border-success/40 bg-success/10 p-1.5">

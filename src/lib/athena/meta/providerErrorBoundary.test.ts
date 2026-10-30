@@ -82,7 +82,7 @@ describe("C1: failure outcomes carry categories, never provider text", () => {
     expect(res).toEqual({ state: "error", reason: want, requestSent: true });
   });
   it.each([
-    ["a status with text", `500; ${poison()}`], ["a status string", "500"], ["out of range low", 99], ["out of range high", 600], ["a float", 500.5], ["NaN", Number.NaN], ["Infinity", Infinity], ["negative", -500], ["a huge number", 1e21], ["an object", { valueOf: () => 500 }], ["an array", [500]], ["null", null],
+    ["a status with text", `500; ${poison()}`], ["a status string", "500"], ["out of range low", 99], ["out of range high", 600], ["a float", 500.5], ["NaN", Number.NaN], ["Infinity", Infinity], ["negative", -500], ["a huge number", 1e21], ["an object", { valueOf: (): number => 500 }], ["an array", [500]], ["null", null],
   ])("an http_error status given as %s is dropped, not displayed", async (_n, status) => {
     const res = await run(hostile({ complete: async () => ({ kind: "failure", code: "http_error", status }) as never }));
     expect(res).toEqual({ state: "error", reason: "Hostile Co returned an HTTP error (not retried).", requestSent: true });
